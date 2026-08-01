@@ -922,3 +922,225 @@ body.lobby-open {
 .lobby-choice[hidden] {
   display: none;
 }
+
+/* --------------------------------------------------------------------------
+   v6.0 account and Supabase room foundation
+   -------------------------------------------------------------------------- */
+.account-lobby-card {
+  width: min(760px, 100%);
+  padding-top: clamp(24px, 4vw, 44px);
+  padding-bottom: clamp(24px, 4vw, 44px);
+}
+
+.connection-status {
+  min-height: 22px;
+  margin: -6px 0 18px;
+  color: #aab6ba;
+  font-size: 0.78rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+}
+
+.connection-status[data-state="loading"] { color: #f3d166; }
+.connection-status[data-state="connected"] { color: #83e4a8; }
+.connection-status[data-state="error"] { color: #ff8787; }
+
+.lobby-view[hidden],
+.account-form[hidden],
+.waiting-room[hidden] {
+  display: none;
+}
+
+.account-form {
+  text-align: left;
+}
+
+.account-form h2 {
+  margin: 0 0 20px;
+  color: #fff4b2;
+  text-align: center;
+}
+
+.account-form .room-label {
+  margin-top: 14px;
+}
+
+.account-form .room-input {
+  width: 100%;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+}
+
+.form-message.success {
+  color: #83e4a8;
+}
+
+.gold-3d-button:disabled,
+.secondary-button:disabled,
+.text-button:disabled {
+  cursor: wait;
+  filter: grayscale(0.45) brightness(0.72);
+  opacity: 0.72;
+}
+
+.account-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: min(560px, 100%);
+  margin: 0 auto 22px;
+  padding: 12px 14px;
+  border: 1px solid #39444a;
+  background: rgba(7, 11, 13, 0.72);
+  text-align: left;
+}
+
+.account-strip div {
+  min-width: 0;
+}
+
+.account-strip span {
+  display: block;
+  color: #7f8d92;
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.account-strip strong {
+  display: block;
+  overflow: hidden;
+  color: #fff0a0;
+  font-size: 1.05rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-code-input {
+  text-transform: uppercase;
+}
+
+.waiting-room {
+  width: min(570px, 100%);
+}
+
+.waiting-room-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 18px 0 12px;
+  color: #9eaaae;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.room-status-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 9px;
+  border: 1px solid #6d5c22;
+  background: #29220e;
+  color: #ffe16f;
+  letter-spacing: 0.1em;
+}
+
+.room-status-badge[data-status="playing"] {
+  border-color: #277c4b;
+  background: #102c1e;
+  color: #8df0b2;
+}
+
+.room-player-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room-player {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 11px;
+  border: 1px solid #354148;
+  background: rgba(8, 12, 14, 0.78);
+  text-align: left;
+}
+
+.room-player.occupied {
+  border-color: #5d5430;
+  background: linear-gradient(90deg, rgba(255, 207, 55, 0.08), rgba(8, 12, 14, 0.82));
+}
+
+.room-player.empty {
+  opacity: 0.58;
+}
+
+.player-slot {
+  display: grid;
+  place-items: center;
+  min-height: 30px;
+  border: 1px solid #4e5a60;
+  color: #f3d76e;
+  font-size: 0.72rem;
+  font-weight: 950;
+}
+
+.room-player strong {
+  overflow: hidden;
+  color: #eaf0f2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-tag {
+  color: #8b9a9f;
+  font-size: 0.64rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+}
+
+.waiting-room-actions {
+  margin-top: 4px;
+}
+
+@media (max-width: 620px) {
+  .account-lobby-card {
+    padding: 22px 18px 26px;
+  }
+
+  .account-strip {
+    align-items: flex-start;
+  }
+
+  .room-player {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+  }
+
+  .waiting-room-meta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+/* v6.0 username account fields */
+#createAccountName,
+#loginAccountName {
+  text-transform: lowercase;
+}
+
+.account-name-note {
+  margin-top: -4px;
+  color: #aab5ba;
+  font-size: 0.74rem;
+}

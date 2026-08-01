@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07090b">
-  <title>Elemental Pacman v5.0</title>
+  <title>Elemental Pacman v6.0 Username Multiplayer</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -16,10 +16,10 @@
       <span class="lobby-pacman-mouth"></span>
     </div>
 
-    <div class="lobby-card">
-      <p class="eyebrow lobby-eyebrow">ELEMENTAL CITY NETWORK</p>
-      <h1 id="lobbyTitle" class="lobby-title">Elemental Pacman <span>v5.0</span></h1>
-      <p class="lobby-subtitle">Create a room, share its ID, or enter an existing room ID to begin.</p>
+    <div class="lobby-card account-lobby-card">
+      <p class="eyebrow lobby-eyebrow">SUPABASE MULTIPLAYER FOUNDATION</p>
+      <h1 id="lobbyTitle" class="lobby-title">Elemental Pacman <span>v6.0</span></h1>
+      <p class="lobby-subtitle">Create an account name, enter a live room, and join before or after the match starts.</p>
 
       <div class="ghost-track" aria-label="Four elemental creeps patrolling">
         <div class="ghost-parade" aria-hidden="true">
@@ -30,43 +30,106 @@
         </div>
       </div>
 
-      <div id="lobbyChoice" class="lobby-choice">
-        <button id="createGameButton" class="gold-3d-button" type="button">Create Game</button>
-        <button id="joinGameButton" class="gold-3d-button" type="button">Join Game</button>
-      </div>
+      <p id="connectionStatus" class="connection-status" data-state="loading" aria-live="polite">
+        Connecting to Supabase…
+      </p>
 
-      <section id="createRoomPanel" class="room-panel" hidden aria-live="polite">
-        <p class="room-label">Your Game ID</p>
-        <div class="room-id-row">
-          <strong id="createdRoomId" class="room-id">------</strong>
-          <button id="copyRoomButton" class="secondary-button" type="button">Copy ID</button>
+      <section id="authView" class="lobby-view" aria-label="Account access">
+        <div id="authChoice" class="lobby-choice">
+          <button id="showCreateAccountButton" class="gold-3d-button" type="button">Create Account</button>
+          <button id="showLoginButton" class="gold-3d-button" type="button">Log In</button>
         </div>
-        <p class="room-note">Share this ID. The current static build uses it as the room/session key.</p>
-        <div class="room-actions">
-          <button id="startCreatedGameButton" class="gold-3d-button compact" type="button">Start Game</button>
-          <button id="cancelCreateButton" class="text-button" type="button">Back</button>
-        </div>
+
+        <form id="createAccountForm" class="account-form room-panel" hidden novalidate>
+          <h2>Create Account</h2>
+          <label class="room-label" for="createAccountName">Account name</label>
+          <input id="createAccountName" class="room-input" type="text" minlength="3" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="golden_j" required>
+          <p class="room-note account-name-note">Use 3–20 lowercase letters, numbers, or underscores.</p>
+
+          <label class="room-label" for="createPassword">Password</label>
+          <input id="createPassword" class="room-input" type="password" minlength="8" autocomplete="new-password" placeholder="Minimum 8 characters" required>
+
+          <label class="room-label" for="createPasswordConfirm">Confirm password</label>
+          <input id="createPasswordConfirm" class="room-input" type="password" minlength="8" autocomplete="new-password" placeholder="Repeat password" required>
+
+          <p id="createAccountMessage" class="room-note form-message" aria-live="polite"></p>
+          <div class="room-actions">
+            <button class="gold-3d-button compact" type="submit">Create Account</button>
+            <button class="text-button auth-back-button" type="button">Back</button>
+          </div>
+        </form>
+
+        <form id="loginForm" class="account-form room-panel" hidden novalidate>
+          <h2>Log In</h2>
+          <label class="room-label" for="loginAccountName">Account name</label>
+          <input id="loginAccountName" class="room-input" type="text" minlength="3" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="golden_j" required>
+
+          <label class="room-label" for="loginPassword">Password</label>
+          <input id="loginPassword" class="room-input" type="password" autocomplete="current-password" placeholder="Your password" required>
+
+          <p id="loginMessage" class="room-note form-message" aria-live="polite"></p>
+          <div class="room-actions">
+            <button class="gold-3d-button compact" type="submit">Log In</button>
+            <button class="text-button auth-back-button" type="button">Back</button>
+          </div>
+        </form>
       </section>
 
-      <form id="joinRoomPanel" class="room-panel" hidden novalidate>
-        <label for="roomIdInput" class="room-label">Enter Game ID</label>
-        <input id="roomIdInput" class="room-input" type="text" inputmode="text" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABC123" aria-describedby="joinRoomMessage">
-        <p id="joinRoomMessage" class="room-note">Use the six-character ID shared by the room creator.</p>
-        <div class="room-actions">
-          <button class="gold-3d-button compact" type="submit">Join &amp; Start</button>
-          <button id="cancelJoinButton" class="text-button" type="button">Back</button>
+      <section id="roomView" class="lobby-view" hidden aria-label="Multiplayer rooms">
+        <div class="account-strip">
+          <div>
+            <span>Signed in as</span>
+            <strong id="accountDisplayName">Player</strong>
+          </div>
+          <button id="signOutButton" class="text-button" type="button">Sign Out</button>
         </div>
-      </form>
+
+        <div id="roomChoice" class="lobby-choice">
+          <button id="createGameButton" class="gold-3d-button" type="button">Create Game</button>
+          <button id="joinGameButton" class="gold-3d-button" type="button">Join Game</button>
+        </div>
+
+        <form id="joinRoomPanel" class="room-panel" hidden novalidate>
+          <label for="roomIdInput" class="room-label">Enter Game ID</label>
+          <input id="roomIdInput" class="room-input room-code-input" type="text" inputmode="text" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABC123" aria-describedby="joinRoomMessage">
+          <p id="joinRoomMessage" class="room-note form-message">Use the six-character ID. You may join a waiting room or a match already in progress.</p>
+          <div class="room-actions">
+            <button class="gold-3d-button compact" type="submit">Join Room</button>
+            <button id="cancelJoinButton" class="text-button" type="button">Back</button>
+          </div>
+        </form>
+
+        <section id="waitingRoomPanel" class="waiting-room room-panel" hidden aria-live="polite">
+          <p class="room-label">Game Room</p>
+          <div class="room-id-row">
+            <strong id="activeRoomCode" class="room-id">------</strong>
+            <button id="copyRoomButton" class="secondary-button" type="button">Copy ID</button>
+          </div>
+
+          <div class="waiting-room-meta">
+            <span id="roomStatusBadge" class="room-status-badge">WAITING</span>
+            <span id="roomPlayerCount">0 / 4 players</span>
+          </div>
+
+          <ol id="roomPlayerList" class="room-player-list" aria-label="Players in room"></ol>
+          <p id="waitingRoomMessage" class="room-note form-message">Waiting for players…</p>
+
+          <div class="room-actions waiting-room-actions">
+            <button id="startRoomButton" class="gold-3d-button compact" type="button" hidden>Start Game</button>
+            <button id="leaveWaitingRoomButton" class="text-button" type="button">Leave Room</button>
+          </div>
+        </section>
+      </section>
     </div>
 
-    <p class="lobby-footer">Desktop: Arrow Keys / WASD &nbsp;•&nbsp; Mobile: swipe anywhere on the game</p>
+    <p class="lobby-footer">Username accounts, join-in-progress rooms, heartbeat cleanup, and automatic host transfer are enabled. Gameplay synchronization remains the next checkpoint.</p>
   </section>
 
   <main id="gameShell" class="game-shell" inert aria-hidden="true">
     <header class="game-header">
       <div class="title-block">
         <p class="eyebrow">PROCEDURAL CITY CHASE</p>
-        <h1>Elemental Pacman <span>v5.0</span></h1>
+        <h1>Elemental Pacman <span>v6.0</span></h1>
         <p class="camera-note"><span aria-hidden="true">◉</span> Camera locked to Pacman</p>
       </div>
 
@@ -112,6 +175,14 @@
       </div>
     </section>
   </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="multiplayer/config.js"></script>
+  <script src="multiplayer/supabase-client.js"></script>
+  <script src="multiplayer/auth.js"></script>
+  <script src="multiplayer/room-service.js"></script>
+  <script src="multiplayer/room-realtime.js"></script>
+  <script src="multiplayer/multiplayer.js"></script>
 
   <script src="js/map.js"></script>
   <script src="js/pellets.js"></script>
