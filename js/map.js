@@ -20,8 +20,42 @@
   const MALL_NAMES = ["CITY MALL", "CENTREPOINT", "HARBOUR", "SKYLINE", "GALLERIA", "MEGAPLAZA"];
   const STALL_COLORS = ["#f06543", "#f4c95d", "#5bc0be", "#9b5de5", "#ef476f", "#ff7f50"];
 
-  function randomItem(items) {
-    return items[Math.floor(Math.random() * items.length)];
+  function normalizeSeed(value) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return (Math.trunc(numeric) >>> 0) || 1;
+
+    const source = String(value || "elemental-pacman");
+    let hash = 2166136261;
+    for (let i = 0; i < source.length; i += 1) {
+      hash ^= source.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) || 1;
+  }
+
+  function mixSeed(seed, salt) {
+    let value = (normalizeSeed(seed) ^ Math.imul(salt + 1, 0x9e3779b1)) >>> 0;
+    value ^= value >>> 16;
+    value = Math.imul(value, 0x85ebca6b);
+    value ^= value >>> 13;
+    value = Math.imul(value, 0xc2b2ae35);
+    value ^= value >>> 16;
+    return (value >>> 0) || 1;
+  }
+
+  function createSeededRandom(seed) {
+    let state = normalizeSeed(seed);
+    return function seededRandom() {
+      state = (state + 0x6d2b79f5) >>> 0;
+      let value = state;
+      value = Math.imul(value ^ (value >>> 15), value | 1);
+      value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+      return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function randomItem(items, random) {
+    return items[Math.floor(random() * items.length)];
   }
 
   function tileHash(x, y, seed) {
@@ -31,15 +65,24 @@
   }
 
   class MazeMap {
-    constructor(cols = 65, rows = 49) {
+    constructor(cols = 65, rows = 49, seed = null) {
       this.cols = cols;
       this.rows = rows;
       this.grid = [];
-      this.seed = Math.floor(Math.random() * 1_000_000);
+      this.roomSeed = normalizeSeed(
+        seed ?? Math.floor(Math.random() * 0xffffffff)
+      );
+      this.seed = this.roomSeed;
+      this.random = createSeededRandom(this.seed);
       this.spawnTiles = [];
       this.lots = [];
       this.surfaceGrid = [];
       this.generate();
+    }
+
+    resetRandomForAttempt(attempt) {
+      this.seed = mixSeed(this.roomSeed, attempt);
+      this.random = createSeededRandom(this.seed);
     }
 
     generate() {
@@ -48,7 +91,7 @@
 
       while (!accepted && attempt < 180) {
         attempt += 1;
-        this.seed = Math.floor(Math.random() * 1_000_000);
+        this.resetRandomForAttempt(attempt);
         this.grid = Array.from({ length: this.rows }, (_, y) =>
           Array.from({ length: this.cols }, (_, x) =>
             x === 0 || y === 0 || x === this.cols - 1 || y === this.rows - 1 ? 1 : 0
@@ -56,14 +99,14 @@
         );
         this.lots = [];
 
-        const targetLots = 48 + Math.floor(Math.random() * 13);
+        const targetLots = 48 + Math.floor(this.random() * 13);
         let placementAttempts = 0;
 
         while (this.lots.length < targetLots && placementAttempts < targetLots * 22) {
           placementAttempts += 1;
           const definition = this.randomLotDefinition();
-          const x = 2 + Math.floor(Math.random() * Math.max(1, this.cols - definition.w - 4));
-          const y = 2 + Math.floor(Math.random() * Math.max(1, this.rows - definition.h - 4));
+          const x = 2 + Math.floor(this.random() * Math.max(1, this.cols - definition.w - 4));
+          const y = 2 + Math.floor(this.random() * Math.max(1, this.rows - definition.h - 4));
 
           if (this.isReservedArea(x, y, definition.w, definition.h)) continue;
           if (!this.canPlaceLot(x, y, definition.w, definition.h, definition.padding)) continue;
@@ -82,7 +125,7 @@
     }
 
     randomLotDefinition() {
-      const roll = Math.random();
+      const roll = this.random();
 
       if (roll < 0.14) {
         return { kind: "cone", w: 1, h: 1, padding: 1 };
@@ -91,7 +134,7 @@
       if (roll < 0.29) {
         return {
           kind: "stall",
-          w: Math.random() < 0.65 ? 1 : 2,
+          w: this.random() < 0.65 ? 1 : 2,
           h: 1,
           padding: 1
         };
@@ -100,7 +143,7 @@
       if (roll < 0.54) {
         return {
           kind: "shop",
-          w: 2 + Math.floor(Math.random() * 3),
+          w: 2 + Math.floor(this.random() * 3),
           h: 2,
           padding: 2
         };
@@ -109,8 +152,8 @@
       if (roll < 0.7) {
         return {
           kind: "smallBuilding",
-          w: 2 + Math.floor(Math.random() * 2),
-          h: 2 + Math.floor(Math.random() * 2),
+          w: 2 + Math.floor(this.random() * 2),
+          h: 2 + Math.floor(this.random() * 2),
           padding: 2
         };
       }
@@ -118,7 +161,7 @@
       if (roll < 0.84) {
         return {
           kind: "mall",
-          w: 4 + Math.floor(Math.random() * 2),
+          w: 4 + Math.floor(this.random() * 2),
           h: 3,
           padding: 2
         };
@@ -126,8 +169,8 @@
 
       return {
         kind: "bigBuilding",
-        w: 3 + Math.floor(Math.random() * 3),
-        h: 3 + Math.floor(Math.random() * 2),
+        w: 3 + Math.floor(this.random() * 3),
+        h: 3 + Math.floor(this.random() * 2),
         padding: 2
       };
     }
@@ -139,7 +182,7 @@
         }
       }
 
-      const palette = randomItem(BUILDING_PALETTES);
+      const palette = randomItem(BUILDING_PALETTES, this.random);
       this.lots.push({
         x,
         y,
@@ -147,13 +190,13 @@
         h: definition.h,
         kind: definition.kind,
         palette,
-        accent: randomItem(STALL_COLORS),
-        sign: definition.kind === "mall" ? randomItem(MALL_NAMES) : randomItem(SHOP_NAMES),
-        subSign: randomItem(["OPEN 24H", "FOOD", "SALE", "MARKET", "SHOPS", "LEVEL 1"]),
-        variant: Math.floor(Math.random() * 5),
-        rooftopUnits: 1 + Math.floor(Math.random() * 4),
-        lightColor: randomItem(["#ffd978", "#8fe7ff", "#fcb8ff", "#fff2a2"]),
-        lampPosts: definition.kind === "cone" ? 0 : 1 + Math.floor(Math.random() * 2)
+        accent: randomItem(STALL_COLORS, this.random),
+        sign: definition.kind === "mall" ? randomItem(MALL_NAMES, this.random) : randomItem(SHOP_NAMES, this.random),
+        subSign: randomItem(["OPEN 24H", "FOOD", "SALE", "MARKET", "SHOPS", "LEVEL 1"], this.random),
+        variant: Math.floor(this.random() * 5),
+        rooftopUnits: 1 + Math.floor(this.random() * 4),
+        lightColor: randomItem(["#ffd978", "#8fe7ff", "#fcb8ff", "#fff2a2"], this.random),
+        lampPosts: definition.kind === "cone" ? 0 : 1 + Math.floor(this.random() * 2)
       });
     }
 
@@ -293,6 +336,18 @@
       return this.findNearestFloor(center.x, center.y);
     }
 
+    getPlayerStartTile(playerSlot = 1) {
+      const center = this.getStartTile();
+      const offsets = [
+        { x: 0, y: 0 },
+        { x: 1, y: 0 },
+        { x: -1, y: 0 },
+        { x: 0, y: 1 }
+      ];
+      const offset = offsets[Math.max(0, Math.min(3, Number(playerSlot) - 1))] || offsets[0];
+      return this.findNearestFloor(center.x + offset.x, center.y + offset.y);
+    }
+
     getCornerSpawnTiles() {
       const corners = [
         { x: 2, y: 2 },
@@ -330,7 +385,7 @@
     randomFloorTile(exclusions = []) {
       const excluded = new Set(exclusions.map((tile) => `${Math.round(tile.x)},${Math.round(tile.y)}`));
       const candidates = this.getFloorTiles().filter((tile) => !excluded.has(`${tile.x},${tile.y}`));
-      return candidates[Math.floor(Math.random() * candidates.length)] || this.getStartTile();
+      return candidates[Math.floor(this.random() * candidates.length)] || this.getStartTile();
     }
 
     buildSurfaceMap() {

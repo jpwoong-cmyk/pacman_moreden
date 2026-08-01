@@ -73,25 +73,43 @@
       return 0;
     }
 
-    draw(ctx, viewport) {
+    draw(ctx, viewport, options = {}) {
       const { tileSize, offsetX, offsetY } = viewport;
       const cx = offsetX + (this.x + 0.5) * tileSize;
       const cy = offsetY + (this.y + 0.5) * tileSize;
       const radius = this.radius * tileSize;
       const moving = this.dir.x !== 0 || this.dir.y !== 0;
       const mouth = moving ? 0.14 + Math.abs(Math.sin(this.movingTime * 12)) * 0.28 : 0.08;
+      const remote = options.variant === "remote";
 
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(this.angle);
 
-      ctx.shadowColor = "rgba(255, 202, 37, 0.62)";
+      ctx.shadowColor = remote
+        ? "rgba(207, 218, 229, 0.68)"
+        : "rgba(255, 202, 37, 0.62)";
       ctx.shadowBlur = tileSize * 0.24;
 
-      const body = ctx.createRadialGradient(-radius * 0.3, -radius * 0.35, radius * 0.05, 0, 0, radius);
-      body.addColorStop(0, "#fff47a");
-      body.addColorStop(0.45, "#ffd632");
-      body.addColorStop(1, "#d59a00");
+      const body = ctx.createRadialGradient(
+        -radius * 0.3,
+        -radius * 0.35,
+        radius * 0.05,
+        0,
+        0,
+        radius
+      );
+
+      if (remote) {
+        body.addColorStop(0, "#ffffff");
+        body.addColorStop(0.42, "#c9d0d8");
+        body.addColorStop(1, "#69717c");
+      } else {
+        body.addColorStop(0, "#fff47a");
+        body.addColorStop(0.45, "#ffd632");
+        body.addColorStop(1, "#d59a00");
+      }
+
       ctx.fillStyle = body;
       ctx.beginPath();
       ctx.moveTo(0, 0);
@@ -99,8 +117,14 @@
       ctx.closePath();
       ctx.fill();
 
+      if (remote) {
+        ctx.strokeStyle = "rgba(244, 248, 252, 0.76)";
+        ctx.lineWidth = Math.max(1, tileSize * 0.025);
+        ctx.stroke();
+      }
+
       ctx.shadowBlur = 0;
-      ctx.fillStyle = "#1a1300";
+      ctx.fillStyle = remote ? "#1d232a" : "#1a1300";
       ctx.beginPath();
       ctx.arc(radius * 0.13, -radius * 0.48, radius * 0.12, 0, Math.PI * 2);
       ctx.fill();
@@ -111,7 +135,22 @@
       ctx.fill();
 
       ctx.restore();
+
+      if (remote && options.label) {
+        ctx.save();
+        ctx.font = `700 ${Math.max(10, tileSize * 0.2)}px ui-sans-serif, system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.lineJoin = "round";
+        ctx.lineWidth = Math.max(2, tileSize * 0.055);
+        ctx.strokeStyle = "rgba(5, 8, 11, 0.86)";
+        ctx.strokeText(options.label, cx, cy - radius - tileSize * 0.13);
+        ctx.fillStyle = "#e3e8ee";
+        ctx.fillText(options.label, cx, cy - radius - tileSize * 0.13);
+        ctx.restore();
+      }
     }
+
   }
 
   window.Pacman = Pacman;

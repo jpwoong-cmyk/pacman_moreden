@@ -2,8 +2,10 @@
   "use strict";
 
   let activeChannel = null;
+  let subscribed = false;
 
   async function unsubscribe() {
+    subscribed = false;
     if (!activeChannel || !window.pacmanSupabase) return;
     await window.pacmanSupabase.removeChannel(activeChannel);
     activeChannel = null;
@@ -13,7 +15,19 @@
     await unsubscribe();
 
     const channel = window.pacmanSupabase
-      .channel(`room-database:${roomId}`)
+      .channel(`game:${roomId}`, {
+        config: {
+          broadcast: {
+            self: false,
+            ack: false
+          }
+        }
+      })
+      .on(
+        "broadcast",
+        { event: "player-state" },
+        (message) => handlers.onPlayerState?.(message?.payload || message)
+      )
       .on(
         "postgres_changes",
         {
@@ -55,6 +69,7 @@
         (payload) => handlers.onRoomUpdate?.(payload)
       )
       .subscribe((status, error) => {
+        subscribed = status === "SUBSCRIBED";
         handlers.onStatus?.(status, error || null);
       });
 
@@ -62,8 +77,22 @@
     return channel;
   }
 
+  function sendPlayerState(payload) {
+    if (!activeChannel || !subscribed) return false;
+
+    void activeChannel.send({
+      type: "broadcast",
+      event: "player-state",
+      payload
+    });
+
+    return true;
+  }
+
   window.PacmanRoomRealtime = Object.freeze({
     subscribe,
-    unsubscribe
+    unsubscribe,
+    sendPlayerState,
+    isSubscribed: () => subscribed
   });
 })();

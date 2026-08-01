@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  const POSITION_BROADCAST_INTERVAL = 1 / 12;
+
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
 
@@ -25,7 +27,13 @@
     pellets: null,
     pacman: null,
     creeps: null,
+    remotePlayers: null,
+    room: null,
+    roster: [],
+    currentUserId: null,
+    playerSlot: 1,
     roomId: "------",
+    mapSeed: 1,
     score: 0,
     running: false,
     paused: false,
@@ -33,6 +41,8 @@
     depthMode: true,
     elapsed: 0,
     spawnTimer: 10,
+    broadcastAccumulator: 0,
+    broadcastSequence: 0,
     lastTime: performance.now(),
     viewport: {
       tileSize: 50,
@@ -69,15 +79,59 @@
     return cleaned || "LOCAL1";
   }
 
-  function buildGame(startImmediately = false, roomId = state.roomId) {
-    state.roomId = normaliseRoomId(roomId);
-    state.map = new MazeMap(65, 49);
+  function normaliseRoom(roomOrCode) {
+    if (roomOrCode && typeof roomOrCode === "object") {
+      return {
+        ...roomOrCode,
+        code: normaliseRoomId(roomOrCode.code)
+      };
+    }
+
+    return {
+      id: null,
+      code: normaliseRoomId(roomOrCode),
+      map_seed: String(roomOrCode || "LOCAL1"),
+      status: "playing"
+    };
+  }
+
+  function getCurrentMembership(players, currentUserId) {
+    return players.find((player) => player.user_id === currentUserId) || null;
+  }
+
+  function buildGame(
+    startImmediately = false,
+    roomOrCode = state.room || state.roomId,
+    players = state.roster,
+    currentUserId = state.currentUserId
+  ) {
+    const room = normaliseRoom(roomOrCode);
+    const roster = Array.isArray(players) ? players : [];
+    const resolvedUserId =
+      currentUserId ||
+      window.PacmanMultiplayer?.state?.user?.id ||
+      "local-player";
+    const membership = getCurrentMembership(roster, resolvedUserId);
+
+    state.room = room;
+    state.roster = roster;
+    state.currentUserId = resolvedUserId;
+    state.playerSlot = Number(membership?.player_slot) || 1;
+    state.roomId = room.code;
+    state.mapSeed = room.map_seed ?? room.code;
+
+    // Every browser receives the same room.map_seed from Supabase.
+    state.map = new MazeMap(65, 49, state.mapSeed);
     state.pellets = new PelletManager(state.map);
-    state.pacman = new Pacman(state.map.getStartTile());
+    state.pacman = new Pacman(state.map.getPlayerStartTile(state.playerSlot));
     state.creeps = new CreepManager(state.map);
+    state.remotePlayers = new RemotePlayerManager(state.map, state.currentUserId);
+    state.remotePlayers.setRoster(state.roster);
+
     state.score = 0;
     state.elapsed = 0;
     state.spawnTimer = 10;
+    state.broadcastAccumulator = POSITION_BROADCAST_INTERVAL;
     state.paused = false;
     state.gameOver = false;
     pauseButton.textContent = "Pause";
@@ -96,15 +150,16 @@
     if (startImmediately) {
       state.lastTime = performance.now();
       canvas.focus({ preventScroll: true });
+      sendPlayerSnapshot();
     }
   }
 
-  function launchRoom(roomId) {
-    buildGame(true, roomId);
+  function launchRoom(room, players = [], currentUserId = null) {
+    buildGame(true, room, players, currentUserId);
   }
 
   function replayRoom() {
-    buildGame(true, state.roomId);
+    buildGame(true, state.room, state.roster, state.currentUserId);
   }
 
   function togglePause() {
@@ -115,13 +170,31 @@
     state.lastTime = performance.now();
   }
 
+  function sendPlayerSnapshot() {
+    if (!state.running || !state.pacman || !window.PacmanMultiplayer) return;
+
+    state.broadcastSequence += 1;
+    window.PacmanMultiplayer.broadcastPlayerState({
+      sequence: state.broadcastSequence,
+      x: Number(state.pacman.x.toFixed(4)),
+      y: Number(state.pacman.y.toFixed(4)),
+      dirX: state.pacman.dir.x,
+      dirY: state.pacman.dir.y,
+      angle: Number(state.pacman.angle.toFixed(4)),
+      score: state.score,
+      sentAt: Date.now()
+    });
+  }
+
   function update(dt) {
     if (!state.running || state.paused || state.gameOver) return;
 
     state.elapsed += dt;
     state.spawnTimer -= dt;
+    state.broadcastAccumulator += dt;
 
     state.pacman.update(dt, state.map);
+    state.remotePlayers?.update(dt);
     state.creeps.update(dt, state.pacman, state.elapsed, state.pellets);
 
     if (state.pellets.collectAt(state.pacman.x, state.pacman.y)) {
@@ -129,6 +202,7 @@
     }
 
     if (state.creeps.collidesWith(state.pacman)) {
+      sendPlayerSnapshot();
       endGame();
       return;
     }
@@ -140,6 +214,11 @@
       state.spawnTimer += 10;
     }
 
+    if (state.broadcastAccumulator >= POSITION_BROADCAST_INTERVAL) {
+      state.broadcastAccumulator %= POSITION_BROADCAST_INTERVAL;
+      sendPlayerSnapshot();
+    }
+
     updateCamera();
     updateHud();
   }
@@ -148,7 +227,7 @@
     state.gameOver = true;
     state.running = false;
     overlayTitle.textContent = "Caught in the elemental city";
-    overlayText.textContent = `Room ${state.roomId} ended with ${state.score} points. The streets are ready to rearrange.`;
+    overlayText.textContent = `Room ${state.roomId} ended with ${state.score} points. The streets are ready for another run.`;
     startButton.textContent = "Play Again";
     overlay.classList.remove("hidden");
   }
@@ -216,6 +295,7 @@
     state.map.draw(ctx, state.viewport, state.depthMode);
     state.pellets.draw(ctx, state.viewport, timeSeconds);
     state.creeps.draw(ctx, state.viewport, timeSeconds);
+    state.remotePlayers?.draw(ctx, state.viewport);
     state.pacman.draw(ctx, state.viewport);
     drawCameraVignette(width, height);
   }
@@ -317,6 +397,7 @@
   leaveRoomButton.addEventListener("click", () => {
     state.running = false;
     state.paused = true;
+    state.remotePlayers?.players.clear();
     overlay.classList.add("hidden");
     document.dispatchEvent(new CustomEvent("pacman:leave-room", {
       detail: { roomId: state.roomId }
@@ -338,13 +419,35 @@
     }
   });
 
+  document.addEventListener("pacman:remote-player-state", (event) => {
+    if (!state.running || !state.remotePlayers) return;
+    state.remotePlayers.applyNetworkState(event.detail.payload);
+  });
+
+  document.addEventListener("pacman:room-updated", (event) => {
+    if (!state.room || event.detail.room?.id !== state.room.id) return;
+    state.room = event.detail.room;
+    state.roster = event.detail.players || [];
+    state.remotePlayers?.setRoster(state.roster);
+  });
+
+  document.addEventListener("pacman:room-left", () => {
+    state.running = false;
+    state.remotePlayers?.players.clear();
+  });
+
   window.ElementalPacman = Object.freeze({
     launchRoom,
     replayRoom,
     getRoomId: () => state.roomId,
+    getMapSeed: () => state.mapSeed,
     isRunning: () => state.running
   });
 
-  buildGame(false, "LOCAL1");
+  buildGame(false, {
+    code: "LOCAL1",
+    map_seed: "LOCAL1",
+    status: "playing"
+  }, [], "local-player");
   requestAnimationFrame(frame);
 })();

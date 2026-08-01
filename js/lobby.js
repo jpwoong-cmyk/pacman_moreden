@@ -85,7 +85,7 @@
     document.body.classList.add("lobby-open");
   }
 
-  function launchGame(room) {
+  function launchGame(room, players = [], currentUserId = null) {
     if (!room?.code) return;
 
     lobbyScreen.classList.add("hidden");
@@ -95,7 +95,7 @@
     gameShell.setAttribute("aria-hidden", "false");
     document.body.classList.remove("lobby-open");
 
-    window.ElementalPacman.launchRoom(room.code);
+    window.ElementalPacman.launchRoom(room, players, currentUserId);
   }
 
   function setSignedIn(profile) {
@@ -346,7 +346,11 @@
   });
 
   document.addEventListener("pacman:room-started", (event) => {
-    launchGame(event.detail.room);
+    launchGame(
+      event.detail.room,
+      event.detail.players,
+      event.detail.currentUserId
+    );
   });
 
   document.addEventListener("pacman:room-left", () => {

@@ -136,6 +136,10 @@
 
     await window.PacmanRoomRealtime.subscribe(room.id, {
       onChange: () => void refreshRoom(),
+      onPlayerState: (payload) => {
+        if (!payload || payload.userId === state.user?.id) return;
+        emit("pacman:remote-player-state", { payload });
+      },
       onRoomUpdate: (payload) => {
         if (payload?.eventType === "DELETE") {
           void leaveCurrentRoom({ skipDatabase: true });
@@ -222,6 +226,7 @@
           emit("pacman:room-started", {
             room,
             players,
+            currentUserId: state.user?.id || null,
             joinedInProgress: Boolean(room.started_at)
           });
         }
@@ -237,6 +242,26 @@
     if (!state.room) throw new Error("No active room.");
     await window.PacmanRoomService.startRoom(state.room.id);
     await refreshRoom();
+  }
+
+
+  function broadcastPlayerState(playerState) {
+    if (!state.room || state.room.status !== "playing" || !state.user) return false;
+
+    const membership = state.players.find(
+      (player) => player.user_id === state.user.id
+    );
+
+    return window.PacmanRoomRealtime.sendPlayerState({
+      ...playerState,
+      roomId: state.room.id,
+      userId: state.user.id,
+      playerSlot: membership?.player_slot || 1,
+      accountName:
+        state.profile?.account_name ||
+        state.profile?.display_name ||
+        `Player ${membership?.player_slot || 1}`
+    });
   }
 
   async function leaveCurrentRoom(options = {}) {
@@ -266,6 +291,7 @@
     joinRoom,
     refreshRoom,
     startCurrentRoom,
+    broadcastPlayerState,
     leaveCurrentRoom
   });
 
