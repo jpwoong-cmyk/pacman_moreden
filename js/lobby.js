@@ -348,8 +348,8 @@
   document.addEventListener("pacman:room-started", (event) => {
     launchGame(
       event.detail.room,
-      event.detail.players,
-      event.detail.currentUserId
+      event.detail.players || [],
+      event.detail.currentUserId || null
     );
   });
 

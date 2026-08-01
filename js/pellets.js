@@ -5,7 +5,7 @@
     constructor(map) {
       this.map = map;
       this.pellets = new Map();
-      this.maxPellets = 110;
+      this.maxPellets = 260;
     }
 
     reset(map) {

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07090b">
-  <title>Elemental Pacman v6.0 Username Multiplayer</title>
+  <title>P.A.C v7.0 Multiplayer</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -17,17 +17,38 @@
     </div>
 
     <div class="lobby-card account-lobby-card">
-      <p class="eyebrow lobby-eyebrow">SUPABASE MULTIPLAYER FOUNDATION</p>
-      <h1 id="lobbyTitle" class="lobby-title">Elemental Pacman <span>v6.0</span></h1>
-      <p class="lobby-subtitle">Create an account name, enter a live room, and join before or after the match starts.</p>
-
-      <div class="ghost-track" aria-label="Four elemental creeps patrolling">
-        <div class="ghost-parade" aria-hidden="true">
-          <div class="lobby-ghost fire"><i></i><i></i></div>
-          <div class="lobby-ghost water"><i></i><i></i></div>
-          <div class="lobby-ghost lightning"><i></i><i></i></div>
-          <div class="lobby-ghost earth"><i></i><i></i></div>
+      <div class="lobby-eyebrow lobby-score-marquee" aria-label="Pacman high scores">
+        <div id="lobbyScoreTrack" class="lobby-score-track">
+          <span class="lobby-score-group">HIGH SCORES · LOADING CITY RECORDS…</span>
+          <span class="lobby-score-group" aria-hidden="true">HIGH SCORES · LOADING CITY RECORDS…</span>
         </div>
+      </div>
+
+      <h1 id="lobbyTitle" class="lobby-title">
+        <span class="lobby-title-text">P.A.C</span>
+        <span class="lobby-shadow-emblem" aria-label="Shadow creep emblem" role="img">
+          <svg viewBox="0 0 88 88" aria-hidden="true" focusable="false">
+            <defs>
+              <linearGradient id="shadowEmblemOutline" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#ffd431"/>
+                <stop offset="0.48" stop-color="#fff0a0"/>
+                <stop offset="0.55" stop-color="#8f99a5"/>
+                <stop offset="1" stop-color="#edf2f7"/>
+              </linearGradient>
+            </defs>
+            <path d="M18 66V40a26 26 0 0 1 52 0v26l-8-7-9 8-9-8-9 8-9-8-8 7Z" fill="#090c11" stroke="url(#shadowEmblemOutline)" stroke-width="5" stroke-linejoin="round"/>
+            <ellipse cx="35" cy="42" rx="7" ry="9" fill="#f3f6fa"/>
+            <ellipse cx="55" cy="42" rx="7" ry="9" fill="#f3f6fa"/>
+            <circle cx="37" cy="44" r="4" fill="#e21b2d"/>
+            <circle cx="57" cy="44" r="4" fill="#e21b2d"/>
+            <path d="M29 25c8-7 22-7 31 0" fill="none" stroke="#3d434c" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+        </span>
+      </h1>
+      <p class="lobby-subtitle">Create an account, enter a live room, and join the chase before or after the host starts.</p>
+
+      <div class="ghost-track in-game-creep-track" aria-label="Four elemental creeps patrolling">
+        <canvas id="lobbyCreepCanvas" class="lobby-creep-canvas" width="760" height="132" aria-hidden="true"></canvas>
       </div>
 
       <p id="connectionStatus" class="connection-status" data-state="loading" aria-live="polite">
@@ -122,14 +143,14 @@
       </section>
     </div>
 
-    <p class="lobby-footer">Username accounts, join-in-progress rooms, heartbeat cleanup, and automatic host transfer are enabled. Gameplay synchronization remains the next checkpoint.</p>
+    <p class="lobby-footer">P.A.C v7.0 · Shared seeded city · Visible remote players · Live leaderboard · Join-in-progress rooms.</p>
   </section>
 
   <main id="gameShell" class="game-shell" inert aria-hidden="true">
     <header class="game-header">
       <div class="title-block">
         <p class="eyebrow">PROCEDURAL CITY CHASE</p>
-        <h1>Elemental Pacman <span>v6.0</span></h1>
+        <h1>P.A.C <span>v7.0</span></h1>
         <p class="camera-note"><span aria-hidden="true">◉</span> Camera locked to Pacman</p>
       </div>
 
@@ -177,19 +198,20 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <script src="multiplayer/config.js"></script>
   <script src="multiplayer/supabase-client.js"></script>
   <script src="multiplayer/auth.js"></script>
   <script src="multiplayer/room-service.js"></script>
   <script src="multiplayer/room-realtime.js"></script>
+  <script src="multiplayer/leaderboard-service.js"></script>
   <script src="multiplayer/multiplayer.js"></script>
 
   <script src="js/map.js"></script>
   <script src="js/pellets.js"></script>
   <script src="js/pacman.js"></script>
-  <script src="multiplayer/remote-players.js"></script>
   <script src="js/creeps.js"></script>
+  <script src="multiplayer/remote-players.js"></script>
+  <script src="js/lobby-creeps.js"></script>
   <script src="js/main.js"></script>
   <script src="js/lobby.js"></script>
 </body>

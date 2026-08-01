@@ -30,7 +30,7 @@ The browser game never uses the database password.
 
 Open:
 
-`Authentication → Providers → Email`
+`Authentication → Sign In / Providers → Email`
 
 Set:
 
@@ -171,7 +171,7 @@ If the last player leaves, the room status becomes `ended` and later joins are r
 
 ### Account creation says Confirm Email must be disabled
 
-Open **Authentication → Providers → Email** and disable Confirm Email.
+Open **Authentication → Sign In / Providers → Email** and disable Confirm Email.
 
 ### Account name is already taken
 
@@ -188,3 +188,20 @@ Unexpected closes use heartbeat cleanup. Allow up to about 30 seconds. Clicking 
 ### Room player list does not update
 
 Confirm the SQL completed successfully and that `game_rooms` and `room_players` are in the `supabase_realtime` publication.
+
+## P.A.C v7.0 leaderboard upgrade
+
+If your Supabase project is already running the v6.x SQL, open **SQL Editor**, paste the contents of:
+
+`supabase/v7-leaderboard.sql`
+
+and press **Run** once.
+
+This adds:
+
+- `profiles.high_score`
+- `submit_pacman_score(p_score)`
+- `get_pacman_high_scores(p_limit)`
+- public read access to the safe leaderboard function for the lobby ticker
+
+Do not rerun the full `setup.sql` on an existing configured project unless you intentionally want to re-apply the complete setup. The v7 migration file is the smaller and safer update.

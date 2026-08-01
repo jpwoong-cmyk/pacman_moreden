@@ -488,5 +488,6 @@
     }
   }
 
+  window.Creep = Creep;
   window.CreepManager = CreepManager;
 })();

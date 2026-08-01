@@ -2,6 +2,7 @@
   "use strict";
 
   const POSITION_BROADCAST_INTERVAL = 1 / 12;
+  const STARTING_PELLET_COUNT = 180;
 
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
@@ -138,7 +139,7 @@
     pauseButton.setAttribute("aria-pressed", "false");
 
     const exclusions = [state.pacman, ...state.map.spawnTiles];
-    state.pellets.spawn(48, exclusions);
+    state.pellets.spawn(STARTING_PELLET_COUNT, exclusions);
     state.creeps.spawnCornerWave();
 
     state.running = startImmediately;
@@ -230,6 +231,12 @@
     overlayText.textContent = `Room ${state.roomId} ended with ${state.score} points. The streets are ready for another run.`;
     startButton.textContent = "Play Again";
     overlay.classList.remove("hidden");
+
+    if (window.PacmanLeaderboard) {
+      void window.PacmanLeaderboard.submitScore(state.score)
+        .then(() => window.PacmanLeaderboard.refreshTicker())
+        .catch(() => {});
+    }
   }
 
   function updateHud() {

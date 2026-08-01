@@ -1144,3 +1144,131 @@ body.lobby-open {
   color: #aab5ba;
   font-size: 0.74rem;
 }
+
+/* --------------------------------------------------------------------------
+   v7.0 lobby identity, live high scores, and in-game creep preview
+   -------------------------------------------------------------------------- */
+.lobby-score-marquee {
+  position: relative;
+  width: min(620px, 100%);
+  height: 30px;
+  margin: 0 auto 16px;
+  overflow: hidden;
+  border-top: 1px solid rgba(255, 212, 49, 0.2);
+  border-bottom: 1px solid rgba(223, 231, 239, 0.13);
+  color: #d7dde3;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  line-height: 28px;
+  text-align: left;
+  white-space: nowrap;
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+
+.lobby-score-track {
+  display: flex;
+  width: max-content;
+  min-width: 200%;
+  will-change: transform;
+  animation: lobbyHighScoresLeftToRight 26s linear infinite;
+}
+
+.lobby-score-group {
+  flex: 0 0 auto;
+  min-width: 50%;
+  padding-right: 70px;
+  color: #d7dde3;
+}
+
+.lobby-score-group::first-letter {
+  color: var(--gold);
+}
+
+@keyframes lobbyHighScoresLeftToRight {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
+}
+
+.lobby-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 2vw, 22px);
+  min-height: 1.05em;
+}
+
+.lobby-title .lobby-title-text {
+  display: inline-block;
+  color: #f5f7f8;
+  font-size: 1em;
+  line-height: 0.92;
+  letter-spacing: 0.025em;
+  vertical-align: middle;
+  transform: none;
+}
+
+.lobby-title .lobby-shadow-emblem {
+  display: inline-grid;
+  place-items: center;
+  width: 0.92em;
+  height: 0.92em;
+  color: inherit;
+  font-size: 1em;
+  line-height: 1;
+  vertical-align: middle;
+  transform: none;
+  filter:
+    drop-shadow(0 0 10px rgba(255, 212, 49, 0.22))
+    drop-shadow(0 8px 12px rgba(0, 0, 0, 0.46));
+}
+
+.lobby-shadow-emblem svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.in-game-creep-track {
+  height: 132px;
+  margin-top: 24px;
+  margin-bottom: 18px;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.035), transparent),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(0, 0, 0, 0.12));
+}
+
+.lobby-creep-canvas {
+  display: block;
+  width: 100%;
+  height: 132px;
+}
+
+@media (max-width: 560px) {
+  .lobby-score-marquee {
+    width: 100%;
+    font-size: 0.6rem;
+  }
+
+  .lobby-title {
+    gap: 10px;
+  }
+
+  .lobby-title .lobby-shadow-emblem {
+    width: 0.86em;
+    height: 0.86em;
+  }
+
+  .in-game-creep-track,
+  .lobby-creep-canvas {
+    height: 108px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lobby-score-track {
+    animation: none;
+    transform: translateX(0);
+  }
+}
