@@ -4,6 +4,7 @@
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
 
+  const roomValue = document.getElementById("roomValue");
   const scoreValue = document.getElementById("scoreValue");
   const pelletValue = document.getElementById("pelletValue");
   const creepValue = document.getElementById("creepValue");
@@ -16,12 +17,15 @@
   const newMapButton = document.getElementById("newMapButton");
   const viewButton = document.getElementById("viewButton");
   const pauseButton = document.getElementById("pauseButton");
+  const leaveRoomButton = document.getElementById("leaveRoomButton");
+  const swipeHint = document.querySelector(".swipe-hint");
 
   const state = {
     map: null,
     pellets: null,
     pacman: null,
     creeps: null,
+    roomId: "------",
     score: 0,
     running: false,
     paused: false,
@@ -39,6 +43,13 @@
     }
   };
 
+  const swipeState = {
+    active: false,
+    pointerId: null,
+    x: 0,
+    y: 0
+  };
+
   const directionMap = {
     ArrowUp: { x: 0, y: -1 },
     KeyW: { x: 0, y: -1 },
@@ -50,7 +61,16 @@
     KeyD: { x: 1, y: 0 }
   };
 
-  function buildGame(startImmediately = false) {
+  function normaliseRoomId(roomId) {
+    const cleaned = String(roomId || "")
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "")
+      .slice(0, 6);
+    return cleaned || "LOCAL1";
+  }
+
+  function buildGame(startImmediately = false, roomId = state.roomId) {
+    state.roomId = normaliseRoomId(roomId);
     state.map = new MazeMap(65, 49);
     state.pellets = new PelletManager(state.map);
     state.pacman = new Pacman(state.map.getStartTile());
@@ -68,31 +88,23 @@
     state.creeps.spawnCornerWave();
 
     state.running = startImmediately;
+    overlay.classList.add("hidden");
     resizeCanvas();
     updateCamera();
     updateHud();
 
     if (startImmediately) {
-      overlay.classList.add("hidden");
       state.lastTime = performance.now();
-      canvas.focus();
-    } else {
-      overlay.classList.remove("hidden");
-      overlayTitle.textContent = "Enter the shifting city";
-      overlayText.textContent = "Use Arrow Keys or WASD. Creeps roam until Pacman enters their four-tile line of sight.";
-      startButton.textContent = "Start Game";
+      canvas.focus({ preventScroll: true });
     }
   }
 
-  function startGame() {
-    if (state.gameOver) buildGame(true);
-    state.running = true;
-    state.paused = false;
-    overlay.classList.add("hidden");
-    pauseButton.textContent = "Pause";
-    pauseButton.setAttribute("aria-pressed", "false");
-    state.lastTime = performance.now();
-    canvas.focus();
+  function launchRoom(roomId) {
+    buildGame(true, roomId);
+  }
+
+  function replayRoom() {
+    buildGame(true, state.roomId);
   }
 
   function togglePause() {
@@ -136,12 +148,13 @@
     state.gameOver = true;
     state.running = false;
     overlayTitle.textContent = "Caught in the elemental city";
-    overlayText.textContent = `Final score: ${state.score}. Somewhere beyond the camera, the streets have already rearranged.`;
-    startButton.textContent = "Play New City";
+    overlayText.textContent = `Room ${state.roomId} ended with ${state.score} points. The streets are ready to rearrange.`;
+    startButton.textContent = "Play Again";
     overlay.classList.remove("hidden");
   }
 
   function updateHud() {
+    roomValue.textContent = state.roomId;
     scoreValue.textContent = String(state.score);
     pelletValue.textContent = String(state.pellets ? state.pellets.count : 0);
     creepValue.textContent = String(state.creeps ? state.creeps.count : 0);
@@ -232,8 +245,30 @@
   }
 
   function setDirection(direction) {
-    if (!state.pacman) return;
+    if (!state.pacman || !state.running || state.paused) return;
     state.pacman.setDirection(direction);
+  }
+
+  function readSwipe(event) {
+    if (!swipeState.active || event.pointerId !== swipeState.pointerId) return false;
+
+    const dx = event.clientX - swipeState.x;
+    const dy = event.clientY - swipeState.y;
+    const threshold = Math.max(24, Math.min(state.viewport.width, state.viewport.height) * 0.035);
+
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < threshold) return false;
+
+    const direction = Math.abs(dx) > Math.abs(dy)
+      ? { x: dx > 0 ? 1 : -1, y: 0 }
+      : { x: 0, y: dy > 0 ? 1 : -1 };
+
+    setDirection(direction);
+    swipeState.x = event.clientX;
+    swipeState.y = event.clientY;
+    swipeHint?.classList.add("used");
+
+    if (navigator.vibrate) navigator.vibrate(8);
+    return true;
   }
 
   window.addEventListener("keydown", (event) => {
@@ -241,7 +276,6 @@
     if (direction) {
       event.preventDefault();
       setDirection(direction);
-      if (!state.running && !state.gameOver) startGame();
     }
 
     if (event.code === "Space") {
@@ -250,26 +284,45 @@
     }
   });
 
-  document.querySelectorAll("[data-direction]").forEach((button) => {
-    const directions = {
-      up: { x: 0, y: -1 },
-      down: { x: 0, y: 1 },
-      left: { x: -1, y: 0 },
-      right: { x: 1, y: 0 }
-    };
-
-    const activate = (event) => {
-      event.preventDefault();
-      setDirection(directions[button.dataset.direction]);
-      if (!state.running && !state.gameOver) startGame();
-    };
-
-    button.addEventListener("pointerdown", activate);
+  canvas.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    event.preventDefault();
+    swipeState.active = true;
+    swipeState.pointerId = event.pointerId;
+    swipeState.x = event.clientX;
+    swipeState.y = event.clientY;
+    canvas.setPointerCapture?.(event.pointerId);
   });
 
-  startButton.addEventListener("click", startGame);
-  newMapButton.addEventListener("click", () => buildGame(true));
+  canvas.addEventListener("pointermove", (event) => {
+    if (!swipeState.active) return;
+    event.preventDefault();
+    readSwipe(event);
+  });
+
+  function finishSwipe(event) {
+    if (!swipeState.active || event.pointerId !== swipeState.pointerId) return;
+    event.preventDefault();
+    readSwipe(event);
+    swipeState.active = false;
+    swipeState.pointerId = null;
+  }
+
+  canvas.addEventListener("pointerup", finishSwipe);
+  canvas.addEventListener("pointercancel", finishSwipe);
+
+  startButton.addEventListener("click", replayRoom);
+  newMapButton.addEventListener("click", replayRoom);
   pauseButton.addEventListener("click", togglePause);
+  leaveRoomButton.addEventListener("click", () => {
+    state.running = false;
+    state.paused = true;
+    overlay.classList.add("hidden");
+    document.dispatchEvent(new CustomEvent("pacman:leave-room", {
+      detail: { roomId: state.roomId }
+    }));
+  });
+
   viewButton.addEventListener("click", () => {
     state.depthMode = !state.depthMode;
     viewButton.textContent = state.depthMode ? "View: Depth" : "View: Flat";
@@ -285,7 +338,13 @@
     }
   });
 
-  const autoStart = new URLSearchParams(window.location.search).has("autostart");
-  buildGame(autoStart);
+  window.ElementalPacman = Object.freeze({
+    launchRoom,
+    replayRoom,
+    getRoomId: () => state.roomId,
+    isRunning: () => state.running
+  });
+
+  buildGame(false, "LOCAL1");
   requestAnimationFrame(frame);
 })();

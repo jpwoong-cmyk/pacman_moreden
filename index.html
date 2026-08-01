@@ -4,19 +4,74 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07090b">
-  <title>Elemental Pacman v4.0</title>
+  <title>Elemental Pacman v5.0</title>
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-  <main class="game-shell">
+  <section id="lobbyScreen" class="lobby-screen" aria-labelledby="lobbyTitle">
+    <div class="lobby-grid" aria-hidden="true"></div>
+
+    <div class="lobby-pacman" aria-hidden="true">
+      <span class="lobby-pacman-eye"></span>
+      <span class="lobby-pacman-mouth"></span>
+    </div>
+
+    <div class="lobby-card">
+      <p class="eyebrow lobby-eyebrow">ELEMENTAL CITY NETWORK</p>
+      <h1 id="lobbyTitle" class="lobby-title">Elemental Pacman <span>v5.0</span></h1>
+      <p class="lobby-subtitle">Create a room, share its ID, or enter an existing room ID to begin.</p>
+
+      <div class="ghost-track" aria-label="Four elemental creeps patrolling">
+        <div class="ghost-parade" aria-hidden="true">
+          <div class="lobby-ghost fire"><i></i><i></i></div>
+          <div class="lobby-ghost water"><i></i><i></i></div>
+          <div class="lobby-ghost lightning"><i></i><i></i></div>
+          <div class="lobby-ghost earth"><i></i><i></i></div>
+        </div>
+      </div>
+
+      <div id="lobbyChoice" class="lobby-choice">
+        <button id="createGameButton" class="gold-3d-button" type="button">Create Game</button>
+        <button id="joinGameButton" class="gold-3d-button" type="button">Join Game</button>
+      </div>
+
+      <section id="createRoomPanel" class="room-panel" hidden aria-live="polite">
+        <p class="room-label">Your Game ID</p>
+        <div class="room-id-row">
+          <strong id="createdRoomId" class="room-id">------</strong>
+          <button id="copyRoomButton" class="secondary-button" type="button">Copy ID</button>
+        </div>
+        <p class="room-note">Share this ID. The current static build uses it as the room/session key.</p>
+        <div class="room-actions">
+          <button id="startCreatedGameButton" class="gold-3d-button compact" type="button">Start Game</button>
+          <button id="cancelCreateButton" class="text-button" type="button">Back</button>
+        </div>
+      </section>
+
+      <form id="joinRoomPanel" class="room-panel" hidden novalidate>
+        <label for="roomIdInput" class="room-label">Enter Game ID</label>
+        <input id="roomIdInput" class="room-input" type="text" inputmode="text" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABC123" aria-describedby="joinRoomMessage">
+        <p id="joinRoomMessage" class="room-note">Use the six-character ID shared by the room creator.</p>
+        <div class="room-actions">
+          <button class="gold-3d-button compact" type="submit">Join &amp; Start</button>
+          <button id="cancelJoinButton" class="text-button" type="button">Back</button>
+        </div>
+      </form>
+    </div>
+
+    <p class="lobby-footer">Desktop: Arrow Keys / WASD &nbsp;•&nbsp; Mobile: swipe anywhere on the game</p>
+  </section>
+
+  <main id="gameShell" class="game-shell" inert aria-hidden="true">
     <header class="game-header">
       <div class="title-block">
         <p class="eyebrow">PROCEDURAL CITY CHASE</p>
-        <h1>Elemental Pacman <span>v4.0</span></h1>
+        <h1>Elemental Pacman <span>v5.0</span></h1>
         <p class="camera-note"><span aria-hidden="true">◉</span> Camera locked to Pacman</p>
       </div>
 
       <div class="hud" aria-label="Game status">
+        <div class="hud-item"><span>Room</span><strong id="roomValue">------</strong></div>
         <div class="hud-item"><span>Score</span><strong id="scoreValue">0</strong></div>
         <div class="hud-item"><span>Pellets</span><strong id="pelletValue">0</strong></div>
         <div class="hud-item"><span>Creeps</span><strong id="creepValue">0</strong></div>
@@ -26,14 +81,15 @@
     </header>
 
     <section class="board-wrap" aria-label="Elemental Pacman scrolling city board">
-      <canvas id="gameCanvas" width="1600" height="900" tabindex="0" aria-label="Pacman game canvas"></canvas>
+      <canvas id="gameCanvas" width="1600" height="900" tabindex="0" aria-label="Pacman game canvas. On mobile, swipe to move."></canvas>
+      <div class="swipe-hint" aria-hidden="true"><span>↕</span> Swipe to move <span>↔</span></div>
 
-      <div id="startOverlay" class="game-overlay">
+      <div id="startOverlay" class="game-overlay hidden">
         <div class="overlay-panel">
-          <p class="eyebrow">LIVE CITY STREETS, SHADOW CREEPS, FOUR-TILE DANGER.</p>
-          <h2 id="overlayTitle">Enter the living city</h2>
-          <p id="overlayText">Use Arrow Keys or WASD. Creeps roam until Pacman enters their four-tile line of sight, and every creep wave has a small chance to spawn a rare black shadow creep with a special trait.</p>
-          <button id="startButton" class="primary-button" type="button">Start Game</button>
+          <p class="eyebrow">ROOM SESSION COMPLETE.</p>
+          <h2 id="overlayTitle">Caught in the elemental city</h2>
+          <p id="overlayText">The city is ready for another run.</p>
+          <button id="startButton" class="primary-button" type="button">Play Again</button>
         </div>
       </div>
     </section>
@@ -43,6 +99,7 @@
         <button id="newMapButton" type="button">New City</button>
         <button id="viewButton" type="button" aria-pressed="true">View: Depth</button>
         <button id="pauseButton" type="button" aria-pressed="false">Pause</button>
+        <button id="leaveRoomButton" type="button">Leave Room</button>
       </div>
 
       <div class="legend" aria-label="Element legend">
@@ -53,13 +110,6 @@
         <span><i class="legend-dot shadow"></i>Shadow</span>
         <span class="sight-rule">Sight radius: 4 tiles</span>
       </div>
-
-      <div class="dpad" aria-label="Touch controls">
-        <button data-direction="up" aria-label="Move up">▲</button>
-        <button data-direction="left" aria-label="Move left">◀</button>
-        <button data-direction="down" aria-label="Move down">▼</button>
-        <button data-direction="right" aria-label="Move right">▶</button>
-      </div>
     </section>
   </main>
 
@@ -68,5 +118,6 @@
   <script src="js/pacman.js"></script>
   <script src="js/creeps.js"></script>
   <script src="js/main.js"></script>
+  <script src="js/lobby.js"></script>
 </body>
 </html>
