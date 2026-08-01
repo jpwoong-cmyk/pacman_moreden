@@ -1,4 +1,4 @@
-/* P.A.C v7.2.1 mobile correction
+/* P.A.C v7.2.2 mobile correction
    Load after css/styles.css.
 */
 
@@ -6,9 +6,6 @@
   --pac-app-height: 100dvh;
 }
 
-/* Do not use "(pointer: coarse)" here.
-   It can trigger mobile styling on wide touch laptops and tablets.
-*/
 @media (max-width: 950px) {
   html,
   body {
@@ -31,7 +28,6 @@
     overflow: hidden;
   }
 
-  /* Main correction: keep the lobby as a centred panel, not a full-width slab. */
   .lobby-card,
   .account-lobby-card {
     width: min(560px, calc(100vw - 40px));
@@ -52,9 +48,25 @@
     max-width: 430px;
   }
 
-  .ghost-track,
-  .in-game-creep-track {
-    width: min(100%, 460px);
+  /* Keep the creep stage centred and make canvas dimensions match the stage. */
+  .ghost-track.in-game-creep-track {
+    display: grid;
+    place-items: center;
+    width: min(100%, 430px);
+    height: clamp(66px, 10dvh, 86px);
+    min-height: 0;
+    margin: 10px auto 9px;
+    overflow: hidden;
+  }
+
+  .lobby-creep-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 0;
+    margin: 0 auto;
   }
 
   .room-panel,
@@ -162,7 +174,6 @@
   }
 }
 
-/* Normal portrait phones */
 @media (max-width: 600px) {
   .lobby-card,
   .account-lobby-card {
@@ -174,14 +185,24 @@
     font-size: clamp(2rem, 12vw, 3.1rem);
   }
 
+  .ghost-track.in-game-creep-track {
+    width: min(100%, 340px);
+    height: clamp(60px, 9dvh, 76px);
+  }
+
   .gold-3d-button,
   .gold-3d-button.compact {
     width: min(250px, 100%);
     min-width: 0;
   }
+
+  .lobby-screen.panel-open .ghost-track.in-game-creep-track {
+    height: 54px;
+    margin-top: 6px;
+    margin-bottom: 7px;
+  }
 }
 
-/* Very narrow phones */
 @media (max-width: 380px) {
   .lobby-card,
   .account-lobby-card {
@@ -189,9 +210,13 @@
     padding-right: 11px;
     padding-left: 11px;
   }
+
+  .ghost-track.in-game-creep-track {
+    width: min(100%, 310px);
+    height: 60px;
+  }
 }
 
-/* Short landscape phones */
 @media (orientation: landscape) and (max-width: 950px) and (max-height: 600px) {
   .lobby-card,
   .account-lobby-card {
@@ -199,6 +224,13 @@
     max-height: calc(var(--pac-app-height, 100dvh) - 8px);
     padding-top: 10px;
     padding-bottom: 10px;
+  }
+
+  .ghost-track.in-game-creep-track {
+    width: min(100%, 410px);
+    height: 48px;
+    margin-top: 4px;
+    margin-bottom: 4px;
   }
 
   #gameShell .hud {

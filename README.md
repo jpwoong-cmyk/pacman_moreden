@@ -1,56 +1,23 @@
-# P.A.C v7.2.1 Mobile Width Fix
+# P.A.C v7.2.2 Lobby Creep Alignment Fix
 
-Your current repository contains `css/mobile.css` and `js/mobile-viewport.js`,
-but `index.html` does not load them.
+Replace these two files in GitHub:
 
-## Replace these files
+- `css/mobile.css`
+- `js/lobby-creeps.js`
 
-- Replace `css/mobile.css`
-- Replace `js/mobile-viewport.js`
+No `index.html` change is needed.
 
-## Edit index.html
+## Why it was out of place
 
-Inside `<head>`, find:
+The base stylesheet still set the mobile creep canvas to 108px high, while the
+mobile card had already been reduced. The JavaScript also clamped its drawing
+height to at least 92px.
 
-```html
-<link rel="stylesheet" href="css/styles.css">
-```
+The replacement:
 
-Replace it with:
-
-```html
-<link rel="stylesheet" href="css/styles.css">
-<link rel="stylesheet" href="css/mobile.css">
-```
-
-At the bottom, find:
-
-```html
-<script src="js/lobby.js"></script>
-```
-
-Replace it with:
-
-```html
-<script src="js/lobby.js"></script>
-<script src="js/mobile-viewport.js"></script>
-```
-
-## Main correction
-
-The previous mobile file used:
-
-```css
-width: min(100%, 680px);
-```
-
-The corrected phone rule uses:
-
-```css
-width: min(390px, calc(100vw - 28px));
-```
-
-This keeps the account lobby visibly centred with side margins.
-
-The viewport script also no longer dispatches another `resize` event from within
-its own resize handler.
+- gives the creep track an explicit responsive width and height;
+- makes the canvas exactly fill that track;
+- observes the real rendered stage size;
+- calculates creep size from both available width and height;
+- keeps the whole creep group vertically centred;
+- preserves the left-to-right patrol movement.
