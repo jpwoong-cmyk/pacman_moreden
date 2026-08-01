@@ -127,15 +127,23 @@
 
       if (buttonRect.width <= 0 || buttonRect.height <= 0) return;
 
-      const buttonCentre = buttonRect.left + buttonRect.width / 2;
-      const distanceBelowButton = Math.max(
-        0,
-        viewportHeight - buttonRect.bottom
-      );
-      const bottom = distanceBelowButton + buttonRect.height + 13;
+    const buttonCentre = buttonRect.left + buttonRect.width / 2;
+    const distanceBelowButton = Math.max(
+      0,
+      viewportHeight - buttonRect.bottom
+    );
+    const bottom = distanceBelowButton + buttonRect.height + 13;
 
-      joystick.style.left = `${buttonCentre}px`;
-      joystick.style.bottom = `${bottom}px`;
+    const joystickRadius = joystick.offsetWidth / 2;
+    const rightSpacing = 18;
+
+    const safeLeft = Math.min(
+      buttonCentre,
+      window.innerWidth - joystickRadius - rightSpacing
+    );
+
+    joystick.style.left = `${safeLeft}px`;
+    joystick.style.bottom = `${bottom}px`;
     });
   }
 
