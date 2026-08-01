@@ -6,9 +6,18 @@
 
   async function unsubscribe() {
     subscribed = false;
-    if (!activeChannel || !window.pacmanSupabase) return;
+
+    if (!activeChannel || !window.pacmanSupabase) {
+      activeChannel = null;
+      return;
+    }
+
     await window.pacmanSupabase.removeChannel(activeChannel);
     activeChannel = null;
+  }
+
+  function unwrap(message) {
+    return message?.payload || message || null;
   }
 
   async function subscribe(roomId, handlers = {}) {
@@ -26,7 +35,27 @@
       .on(
         "broadcast",
         { event: "player-state" },
-        (message) => handlers.onPlayerState?.(message?.payload || message)
+        (message) => handlers.onPlayerState?.(unwrap(message))
+      )
+      .on(
+        "broadcast",
+        { event: "world-request" },
+        (message) => handlers.onWorldRequest?.(unwrap(message))
+      )
+      .on(
+        "broadcast",
+        { event: "world-snapshot" },
+        (message) => handlers.onWorldSnapshot?.(unwrap(message))
+      )
+      .on(
+        "broadcast",
+        { event: "world-frame" },
+        (message) => handlers.onWorldFrame?.(unwrap(message))
+      )
+      .on(
+        "broadcast",
+        { event: "world-event" },
+        (message) => handlers.onWorldEvent?.(unwrap(message))
       )
       .on(
         "postgres_changes",
@@ -77,22 +106,46 @@
     return channel;
   }
 
-  function sendPlayerState(payload) {
+  function send(event, payload) {
     if (!activeChannel || !subscribed) return false;
 
     void activeChannel.send({
       type: "broadcast",
-      event: "player-state",
+      event,
       payload
     });
 
     return true;
   }
 
+  function sendPlayerState(payload) {
+    return send("player-state", payload);
+  }
+
+  function sendWorldRequest(payload) {
+    return send("world-request", payload);
+  }
+
+  function sendWorldSnapshot(payload) {
+    return send("world-snapshot", payload);
+  }
+
+  function sendWorldFrame(payload) {
+    return send("world-frame", payload);
+  }
+
+  function sendWorldEvent(payload) {
+    return send("world-event", payload);
+  }
+
   window.PacmanRoomRealtime = Object.freeze({
     subscribe,
     unsubscribe,
     sendPlayerState,
+    sendWorldRequest,
+    sendWorldSnapshot,
+    sendWorldFrame,
+    sendWorldEvent,
     isSubscribed: () => subscribed
   });
 })();

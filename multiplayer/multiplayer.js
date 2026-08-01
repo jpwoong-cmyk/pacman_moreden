@@ -23,6 +23,29 @@
     emit("pacman:connection-status", { message, status });
   }
 
+  function isCurrentUserHost() {
+    return Boolean(
+      state.room &&
+      state.user &&
+      state.room.host_user_id === state.user.id
+    );
+  }
+
+  function applyRoom(room) {
+    const previousHostUserId = state.room?.host_user_id || null;
+    state.room = room;
+
+    const hostUserId = room?.host_user_id || null;
+    if (previousHostUserId !== hostUserId) {
+      emit("pacman:host-changed", {
+        room,
+        previousHostUserId,
+        hostUserId,
+        isHost: isCurrentUserHost()
+      });
+    }
+  }
+
   async function loadIdentity(session) {
     state.session = session;
     state.user = session?.user || null;
@@ -91,10 +114,9 @@
   }
 
   function stopHeartbeat() {
-    if (state.heartbeatTimer) {
-      window.clearInterval(state.heartbeatTimer);
-      state.heartbeatTimer = null;
-    }
+    if (!state.heartbeatTimer) return;
+    window.clearInterval(state.heartbeatTimer);
+    state.heartbeatTimer = null;
   }
 
   async function sendHeartbeat() {
@@ -110,10 +132,10 @@
         return;
       }
 
-      const previousHost = state.room.host_user_id;
-      state.room = room;
+      const previousHostUserId = state.room?.host_user_id || null;
+      applyRoom(room);
 
-      if (previousHost !== room.host_user_id) {
+      if (previousHostUserId !== room.host_user_id) {
         await refreshRoom();
       }
     } catch (error) {
@@ -131,7 +153,7 @@
   }
 
   async function enterRoom(room) {
-    state.room = room;
+    applyRoom(room);
     state.roomStartDispatched = false;
 
     await window.PacmanRoomRealtime.subscribe(room.id, {
@@ -139,6 +161,18 @@
       onPlayerState: (payload) => {
         if (!payload || payload.userId === state.user?.id) return;
         emit("pacman:remote-player-state", { payload });
+      },
+      onWorldRequest: (payload) => {
+        emit("pacman:world-request", { payload });
+      },
+      onWorldSnapshot: (payload) => {
+        emit("pacman:world-snapshot", { payload });
+      },
+      onWorldFrame: (payload) => {
+        emit("pacman:world-frame", { payload });
+      },
+      onWorldEvent: (payload) => {
+        emit("pacman:world-event", { payload });
       },
       onRoomUpdate: (payload) => {
         if (payload?.eventType === "DELETE") {
@@ -148,6 +182,7 @@
           });
           return;
         }
+
         void refreshRoom();
       },
       onStatus: (status, error) => {
@@ -211,14 +246,14 @@
           return;
         }
 
-        state.room = room;
+        applyRoom(room);
         state.players = players;
 
         emit("pacman:room-updated", {
           room,
           players,
           currentUserId: state.user?.id || null,
-          isHost: room.host_user_id === state.user?.id
+          isHost: isCurrentUserHost()
         });
 
         if (room.status === "playing" && !state.roomStartDispatched) {
@@ -240,17 +275,23 @@
 
   async function startCurrentRoom() {
     if (!state.room) throw new Error("No active room.");
-    await window.PacmanRoomService.startRoom(state.room.id);
+    const room = await window.PacmanRoomService.startRoom(state.room.id);
+    applyRoom(room);
     await refreshRoom();
   }
 
+  function currentMembership() {
+    return state.players.find(
+      (player) => player.user_id === state.user?.id
+    ) || null;
+  }
 
   function broadcastPlayerState(playerState) {
-    if (!state.room || state.room.status !== "playing" || !state.user) return false;
+    if (!state.room || state.room.status !== "playing" || !state.user) {
+      return false;
+    }
 
-    const membership = state.players.find(
-      (player) => player.user_id === state.user.id
-    );
+    const membership = currentMembership();
 
     return window.PacmanRoomRealtime.sendPlayerState({
       ...playerState,
@@ -262,6 +303,25 @@
         state.profile?.display_name ||
         `Player ${membership?.player_slot || 1}`
     });
+  }
+
+  function broadcastWorldRequest(payload) {
+    return window.PacmanRoomRealtime.sendWorldRequest(payload);
+  }
+
+  function broadcastWorldSnapshot(payload) {
+    if (!isCurrentUserHost()) return false;
+    return window.PacmanRoomRealtime.sendWorldSnapshot(payload);
+  }
+
+  function broadcastWorldFrame(payload) {
+    if (!isCurrentUserHost()) return false;
+    return window.PacmanRoomRealtime.sendWorldFrame(payload);
+  }
+
+  function broadcastWorldEvent(payload) {
+    if (!isCurrentUserHost()) return false;
+    return window.PacmanRoomRealtime.sendWorldEvent(payload);
   }
 
   async function leaveCurrentRoom(options = {}) {
@@ -292,6 +352,12 @@
     refreshRoom,
     startCurrentRoom,
     broadcastPlayerState,
+    broadcastWorldRequest,
+    broadcastWorldSnapshot,
+    broadcastWorldFrame,
+    broadcastWorldEvent,
+    isCurrentUserHost,
+    currentMembership,
     leaveCurrentRoom
   });
 

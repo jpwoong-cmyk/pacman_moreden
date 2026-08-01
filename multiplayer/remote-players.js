@@ -15,6 +15,8 @@
       this.targetAngle = 0;
       this.lastSequence = -1;
       this.hasNetworkState = false;
+      this.alive = true;
+      this.score = 0;
     }
 
     updateMember(member) {
@@ -45,11 +47,51 @@
         y: Number(payload.dirY) || 0
       };
 
-      if (!this.hasNetworkState || Math.hypot(this.pacman.x - x, this.pacman.y - y) > 3) {
+      if (
+        !this.hasNetworkState ||
+        Math.hypot(this.pacman.x - x, this.pacman.y - y) > 3
+      ) {
         this.pacman.x = x;
         this.pacman.y = y;
       }
 
+      this.hasNetworkState = true;
+    }
+
+    applyWorldState(playerState) {
+      if (!playerState) return;
+
+      this.alive = playerState.alive !== false;
+      this.score = Math.max(0, Number(playerState.score) || 0);
+
+      const x = Number(playerState.x);
+      const y = Number(playerState.y);
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        this.targetX = x;
+        this.targetY = y;
+
+        if (!this.hasNetworkState) {
+          this.pacman.x = x;
+          this.pacman.y = y;
+        }
+      }
+
+      this.targetAngle = Number.isFinite(Number(playerState.angle))
+        ? Number(playerState.angle)
+        : this.targetAngle;
+      this.pacman.dir = {
+        x: Number(playerState.dirX) || 0,
+        y: Number(playerState.dirY) || 0
+      };
+      this.hasNetworkState = true;
+    }
+
+    setPosition(tile) {
+      if (!tile) return;
+      this.pacman.x = Number(tile.x) || 0;
+      this.pacman.y = Number(tile.y) || 0;
+      this.targetX = this.pacman.x;
+      this.targetY = this.pacman.y;
       this.hasNetworkState = true;
     }
 
@@ -73,12 +115,32 @@
       while (angleDelta < -Math.PI) angleDelta += Math.PI * 2;
       this.pacman.angle += angleDelta * smoothing;
 
-      if (this.pacman.dir.x !== 0 || this.pacman.dir.y !== 0 || distance > 0.01) {
+      if (
+        this.pacman.dir.x !== 0 ||
+        this.pacman.dir.y !== 0 ||
+        distance > 0.01
+      ) {
         this.pacman.movingTime += dt;
       }
     }
 
+    toActor() {
+      return {
+        userId: this.userId,
+        playerSlot: this.playerSlot,
+        x: this.pacman.x,
+        y: this.pacman.y,
+        dir: { ...this.pacman.dir },
+        angle: this.pacman.angle,
+        radius: this.pacman.radius,
+        alive: this.alive,
+        score: this.score
+      };
+    }
+
     draw(ctx, viewport) {
+      if (!this.alive) return;
+
       this.pacman.draw(ctx, viewport, {
         variant: "remote",
         label: this.accountName
@@ -133,7 +195,8 @@
           user_id: payload.userId,
           player_slot: payload.playerSlot || 1,
           profile: {
-            account_name: payload.accountName || `Player ${payload.playerSlot || ""}`
+            account_name:
+              payload.accountName || `Player ${payload.playerSlot || ""}`
           }
         };
         remote = new RemotePlayerAvatar(
@@ -144,6 +207,51 @@
       }
 
       remote.applyNetworkState(payload);
+    }
+
+    applyWorldPlayers(playerStates = []) {
+      (Array.isArray(playerStates) ? playerStates : []).forEach((playerState) => {
+        if (!playerState?.userId || playerState.userId === this.currentUserId) {
+          return;
+        }
+
+        let remote = this.players.get(playerState.userId);
+        if (!remote) {
+          const member = {
+            user_id: playerState.userId,
+            player_slot: playerState.playerSlot || 1,
+            profile: {
+              account_name:
+                playerState.accountName ||
+                `Player ${playerState.playerSlot || ""}`
+            }
+          };
+          remote = new RemotePlayerAvatar(
+            member,
+            this.map.getPlayerStartTile(member.player_slot)
+          );
+          this.players.set(playerState.userId, remote);
+        }
+
+        remote.applyWorldState(playerState);
+      });
+    }
+
+    setAlive(userId, alive) {
+      const remote = this.players.get(userId);
+      if (remote) remote.alive = Boolean(alive);
+    }
+
+    setPosition(userId, tile) {
+      this.players.get(userId)?.setPosition(tile);
+    }
+
+    getPlayerByUserId(userId) {
+      return this.players.get(userId) || null;
+    }
+
+    getPlayerActors() {
+      return Array.from(this.players.values(), (player) => player.toActor());
     }
 
     update(dt) {

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07090b">
-  <title>P.A.C v7.1 Audio Multiplayer</title>
+  <title>P.A.C v8.0 Shared World</title>
   <link rel="stylesheet" href="css/styles.css">
   <link rel="stylesheet" href="css/mobile.css">
 </head>
@@ -46,7 +46,7 @@
           </svg>
         </span>
       </h1>
-      <p class="lobby-subtitle">Create an account, enter a live room, and join the chase before or after the host starts.</p>
+      <p class="lobby-subtitle">Create an account, enter one shared city, and survive the same creeps, pellets, scores, and timers together.</p>
 
       <div class="ghost-track in-game-creep-track" aria-label="Four elemental creeps patrolling">
         <canvas id="lobbyCreepCanvas" class="lobby-creep-canvas" width="760" height="132" aria-hidden="true"></canvas>
@@ -144,15 +144,15 @@
       </section>
     </div>
 
-    <p class="lobby-footer">P.A.C v7.1 Audio · Shared seeded city · Visible remote players · Live leaderboard · Join-in-progress rooms.</p>
+    <p class="lobby-footer">P.A.C v8.0 · One shared map · Shared creeps · Shared pellets · Shared scores · Host transfer.</p>
   </section>
 
   <main id="gameShell" class="game-shell" inert aria-hidden="true">
     <header class="game-header">
       <div class="title-block">
-        <p class="eyebrow">PROCEDURAL CITY CHASE</p>
-        <h1>P.A.C <span>v7.0</span></h1>
-        <p class="camera-note"><span aria-hidden="true">◉</span> Camera locked to Pacman</p>
+        <p class="eyebrow">SHARED PROCEDURAL CITY</p>
+        <h1>P.A.C <span>v8.0</span></h1>
+        <p class="camera-note"><span aria-hidden="true">◉</span> One room, one simulation</p>
       </div>
 
       <div class="hud" aria-label="Game status">
@@ -161,20 +161,20 @@
         <div class="hud-item"><span>Pellets</span><strong id="pelletValue">0</strong></div>
         <div class="hud-item"><span>Creeps</span><strong id="creepValue">0</strong></div>
         <div class="hud-item"><span>Alerted</span><strong id="alertValue">0</strong></div>
-        <div class="hud-item"><span>Next Spawn</span><strong id="spawnValue">10.0s</strong></div>
+        <div class="hud-item"><span>Next Spawn</span><strong id="spawnValue">SYNC</strong></div>
       </div>
     </header>
 
-    <section class="board-wrap" aria-label="Elemental Pacman scrolling city board">
-      <canvas id="gameCanvas" width="1600" height="900" tabindex="0" aria-label="Pacman game canvas. On mobile, swipe to move."></canvas>
+    <section class="board-wrap" aria-label="P.A.C shared scrolling city board">
+      <canvas id="gameCanvas" width="1600" height="900" tabindex="0" aria-label="P.A.C game canvas. On mobile, swipe to move."></canvas>
       <div class="swipe-hint" aria-hidden="true"><span>↕</span> Swipe to move <span>↔</span></div>
 
       <div id="startOverlay" class="game-overlay hidden">
         <div class="overlay-panel">
-          <p class="eyebrow">ROOM SESSION COMPLETE.</p>
-          <h2 id="overlayTitle">Caught in the elemental city</h2>
-          <p id="overlayText">The city is ready for another run.</p>
-          <button id="startButton" class="primary-button" type="button">Play Again</button>
+          <p class="eyebrow">SHARED ROOM STATUS</p>
+          <h2 id="overlayTitle">Synchronising shared city</h2>
+          <p id="overlayText">Loading the room world.</p>
+          <button id="startButton" class="primary-button" type="button">Continue</button>
         </div>
       </div>
     </section>
@@ -193,7 +193,7 @@
         <span><i class="legend-dot lightning"></i>Lightning</span>
         <span><i class="legend-dot earth"></i>Earth</span>
         <span><i class="legend-dot shadow"></i>Shadow</span>
-        <span class="sight-rule">Sight radius: 4 tiles</span>
+        <span class="sight-rule">Host-authoritative shared world</span>
       </div>
     </section>
   </main>
@@ -204,6 +204,8 @@
   <script src="multiplayer/auth.js"></script>
   <script src="multiplayer/room-service.js"></script>
   <script src="multiplayer/room-realtime.js"></script>
+  <script src="multiplayer/world-service.js"></script>
+  <script src="multiplayer/world-sync.js"></script>
   <script src="multiplayer/leaderboard-service.js"></script>
   <script src="multiplayer/multiplayer.js"></script>
 
