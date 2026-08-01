@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07090b">
+  <title>Elemental Pacman v4.0</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="game-header">
+      <div class="title-block">
+        <p class="eyebrow">PROCEDURAL CITY CHASE</p>
+        <h1>Elemental Pacman <span>v4.0</span></h1>
+        <p class="camera-note"><span aria-hidden="true">◉</span> Camera locked to Pacman</p>
+      </div>
+
+      <div class="hud" aria-label="Game status">
+        <div class="hud-item"><span>Score</span><strong id="scoreValue">0</strong></div>
+        <div class="hud-item"><span>Pellets</span><strong id="pelletValue">0</strong></div>
+        <div class="hud-item"><span>Creeps</span><strong id="creepValue">0</strong></div>
+        <div class="hud-item"><span>Alerted</span><strong id="alertValue">0</strong></div>
+        <div class="hud-item"><span>Next Spawn</span><strong id="spawnValue">10.0s</strong></div>
+      </div>
+    </header>
+
+    <section class="board-wrap" aria-label="Elemental Pacman scrolling city board">
+      <canvas id="gameCanvas" width="1600" height="900" tabindex="0" aria-label="Pacman game canvas"></canvas>
+
+      <div id="startOverlay" class="game-overlay">
+        <div class="overlay-panel">
+          <p class="eyebrow">LIVE CITY STREETS, SHADOW CREEPS, FOUR-TILE DANGER.</p>
+          <h2 id="overlayTitle">Enter the living city</h2>
+          <p id="overlayText">Use Arrow Keys or WASD. Creeps roam until Pacman enters their four-tile line of sight, and every creep wave has a small chance to spawn a rare black shadow creep with a special trait.</p>
+          <button id="startButton" class="primary-button" type="button">Start Game</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="controls-panel">
+      <div class="button-row">
+        <button id="newMapButton" type="button">New City</button>
+        <button id="viewButton" type="button" aria-pressed="true">View: Depth</button>
+        <button id="pauseButton" type="button" aria-pressed="false">Pause</button>
+      </div>
+
+      <div class="legend" aria-label="Element legend">
+        <span><i class="legend-dot fire"></i>Fire</span>
+        <span><i class="legend-dot water"></i>Water</span>
+        <span><i class="legend-dot lightning"></i>Lightning</span>
+        <span><i class="legend-dot earth"></i>Earth</span>
+        <span><i class="legend-dot shadow"></i>Shadow</span>
+        <span class="sight-rule">Sight radius: 4 tiles</span>
+      </div>
+
+      <div class="dpad" aria-label="Touch controls">
+        <button data-direction="up" aria-label="Move up">▲</button>
+        <button data-direction="left" aria-label="Move left">◀</button>
+        <button data-direction="down" aria-label="Move down">▼</button>
+        <button data-direction="right" aria-label="Move right">▶</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="js/map.js"></script>
+  <script src="js/pellets.js"></script>
+  <script src="js/pacman.js"></script>
+  <script src="js/creeps.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

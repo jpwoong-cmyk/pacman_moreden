@@ -1,0 +1,291 @@
+(function () {
+  "use strict";
+
+  const canvas = document.getElementById("gameCanvas");
+  const ctx = canvas.getContext("2d");
+
+  const scoreValue = document.getElementById("scoreValue");
+  const pelletValue = document.getElementById("pelletValue");
+  const creepValue = document.getElementById("creepValue");
+  const alertValue = document.getElementById("alertValue");
+  const spawnValue = document.getElementById("spawnValue");
+  const overlay = document.getElementById("startOverlay");
+  const overlayTitle = document.getElementById("overlayTitle");
+  const overlayText = document.getElementById("overlayText");
+  const startButton = document.getElementById("startButton");
+  const newMapButton = document.getElementById("newMapButton");
+  const viewButton = document.getElementById("viewButton");
+  const pauseButton = document.getElementById("pauseButton");
+
+  const state = {
+    map: null,
+    pellets: null,
+    pacman: null,
+    creeps: null,
+    score: 0,
+    running: false,
+    paused: false,
+    gameOver: false,
+    depthMode: true,
+    elapsed: 0,
+    spawnTimer: 10,
+    lastTime: performance.now(),
+    viewport: {
+      tileSize: 50,
+      offsetX: 0,
+      offsetY: 0,
+      width: 1280,
+      height: 720
+    }
+  };
+
+  const directionMap = {
+    ArrowUp: { x: 0, y: -1 },
+    KeyW: { x: 0, y: -1 },
+    ArrowDown: { x: 0, y: 1 },
+    KeyS: { x: 0, y: 1 },
+    ArrowLeft: { x: -1, y: 0 },
+    KeyA: { x: -1, y: 0 },
+    ArrowRight: { x: 1, y: 0 },
+    KeyD: { x: 1, y: 0 }
+  };
+
+  function buildGame(startImmediately = false) {
+    state.map = new MazeMap(65, 49);
+    state.pellets = new PelletManager(state.map);
+    state.pacman = new Pacman(state.map.getStartTile());
+    state.creeps = new CreepManager(state.map);
+    state.score = 0;
+    state.elapsed = 0;
+    state.spawnTimer = 10;
+    state.paused = false;
+    state.gameOver = false;
+    pauseButton.textContent = "Pause";
+    pauseButton.setAttribute("aria-pressed", "false");
+
+    const exclusions = [state.pacman, ...state.map.spawnTiles];
+    state.pellets.spawn(48, exclusions);
+    state.creeps.spawnCornerWave();
+
+    state.running = startImmediately;
+    resizeCanvas();
+    updateCamera();
+    updateHud();
+
+    if (startImmediately) {
+      overlay.classList.add("hidden");
+      state.lastTime = performance.now();
+      canvas.focus();
+    } else {
+      overlay.classList.remove("hidden");
+      overlayTitle.textContent = "Enter the shifting city";
+      overlayText.textContent = "Use Arrow Keys or WASD. Creeps roam until Pacman enters their four-tile line of sight.";
+      startButton.textContent = "Start Game";
+    }
+  }
+
+  function startGame() {
+    if (state.gameOver) buildGame(true);
+    state.running = true;
+    state.paused = false;
+    overlay.classList.add("hidden");
+    pauseButton.textContent = "Pause";
+    pauseButton.setAttribute("aria-pressed", "false");
+    state.lastTime = performance.now();
+    canvas.focus();
+  }
+
+  function togglePause() {
+    if (!state.running || state.gameOver) return;
+    state.paused = !state.paused;
+    pauseButton.textContent = state.paused ? "Resume" : "Pause";
+    pauseButton.setAttribute("aria-pressed", String(state.paused));
+    state.lastTime = performance.now();
+  }
+
+  function update(dt) {
+    if (!state.running || state.paused || state.gameOver) return;
+
+    state.elapsed += dt;
+    state.spawnTimer -= dt;
+
+    state.pacman.update(dt, state.map);
+    state.creeps.update(dt, state.pacman, state.elapsed, state.pellets);
+
+    if (state.pellets.collectAt(state.pacman.x, state.pacman.y)) {
+      state.score += 10;
+    }
+
+    if (state.creeps.collidesWith(state.pacman)) {
+      endGame();
+      return;
+    }
+
+    if (state.spawnTimer <= 0) {
+      const exclusions = [state.pacman, ...state.map.spawnTiles, ...state.creeps.creeps];
+      state.pellets.spawn(5, exclusions);
+      state.creeps.spawnCornerWave();
+      state.spawnTimer += 10;
+    }
+
+    updateCamera();
+    updateHud();
+  }
+
+  function endGame() {
+    state.gameOver = true;
+    state.running = false;
+    overlayTitle.textContent = "Caught in the elemental city";
+    overlayText.textContent = `Final score: ${state.score}. Somewhere beyond the camera, the streets have already rearranged.`;
+    startButton.textContent = "Play New City";
+    overlay.classList.remove("hidden");
+  }
+
+  function updateHud() {
+    scoreValue.textContent = String(state.score);
+    pelletValue.textContent = String(state.pellets ? state.pellets.count : 0);
+    creepValue.textContent = String(state.creeps ? state.creeps.count : 0);
+    alertValue.textContent = String(state.creeps ? state.creeps.alertedCount : 0);
+    spawnValue.textContent = `${Math.max(0, state.spawnTimer).toFixed(1)}s`;
+  }
+
+  function chooseTileSize(width) {
+    if (width >= 1500) return 56;
+    if (width >= 1100) return 52;
+    if (width >= 760) return 46;
+    return 40;
+  }
+
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const width = Math.max(320, Math.floor(rect.width));
+    const height = Math.max(430, Math.floor(rect.height));
+
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    state.viewport.width = width;
+    state.viewport.height = height;
+    state.viewport.tileSize = chooseTileSize(width);
+    updateCamera();
+  }
+
+  function updateCamera() {
+    if (!state.pacman) return;
+    const { width, height, tileSize } = state.viewport;
+
+    state.viewport.offsetX = width * 0.5 - (state.pacman.x + 0.5) * tileSize;
+    state.viewport.offsetY = height * 0.5 - (state.pacman.y + 0.5) * tileSize;
+  }
+
+  function draw(timeSeconds) {
+    const { width, height } = state.viewport;
+    ctx.clearRect(0, 0, width, height);
+
+    const background = ctx.createRadialGradient(
+      width * 0.5,
+      height * 0.5,
+      40,
+      width * 0.5,
+      height * 0.5,
+      Math.max(width, height) * 0.75
+    );
+    background.addColorStop(0, "#182126");
+    background.addColorStop(1, "#050709");
+    ctx.fillStyle = background;
+    ctx.fillRect(0, 0, width, height);
+
+    if (!state.map) return;
+
+    updateCamera();
+    state.map.draw(ctx, state.viewport, state.depthMode);
+    state.pellets.draw(ctx, state.viewport, timeSeconds);
+    state.creeps.draw(ctx, state.viewport, timeSeconds);
+    state.pacman.draw(ctx, state.viewport);
+    drawCameraVignette(width, height);
+  }
+
+  function drawCameraVignette(width, height) {
+    const vignette = ctx.createRadialGradient(
+      width * 0.5,
+      height * 0.5,
+      Math.min(width, height) * 0.2,
+      width * 0.5,
+      height * 0.5,
+      Math.max(width, height) * 0.72
+    );
+    vignette.addColorStop(0, "rgba(0, 0, 0, 0)");
+    vignette.addColorStop(0.72, "rgba(0, 0, 0, 0.05)");
+    vignette.addColorStop(1, "rgba(0, 0, 0, 0.42)");
+    ctx.fillStyle = vignette;
+    ctx.fillRect(0, 0, width, height);
+  }
+
+  function frame(now) {
+    const dt = Math.min(0.035, (now - state.lastTime) / 1000);
+    state.lastTime = now;
+    update(dt);
+    draw(now / 1000);
+    requestAnimationFrame(frame);
+  }
+
+  function setDirection(direction) {
+    if (!state.pacman) return;
+    state.pacman.setDirection(direction);
+  }
+
+  window.addEventListener("keydown", (event) => {
+    const direction = directionMap[event.code];
+    if (direction) {
+      event.preventDefault();
+      setDirection(direction);
+      if (!state.running && !state.gameOver) startGame();
+    }
+
+    if (event.code === "Space") {
+      event.preventDefault();
+      togglePause();
+    }
+  });
+
+  document.querySelectorAll("[data-direction]").forEach((button) => {
+    const directions = {
+      up: { x: 0, y: -1 },
+      down: { x: 0, y: 1 },
+      left: { x: -1, y: 0 },
+      right: { x: 1, y: 0 }
+    };
+
+    const activate = (event) => {
+      event.preventDefault();
+      setDirection(directions[button.dataset.direction]);
+      if (!state.running && !state.gameOver) startGame();
+    };
+
+    button.addEventListener("pointerdown", activate);
+  });
+
+  startButton.addEventListener("click", startGame);
+  newMapButton.addEventListener("click", () => buildGame(true));
+  pauseButton.addEventListener("click", togglePause);
+  viewButton.addEventListener("click", () => {
+    state.depthMode = !state.depthMode;
+    viewButton.textContent = state.depthMode ? "View: Depth" : "View: Flat";
+    viewButton.setAttribute("aria-pressed", String(state.depthMode));
+  });
+
+  window.addEventListener("resize", resizeCanvas);
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && state.running && !state.gameOver) {
+      state.paused = true;
+      pauseButton.textContent = "Resume";
+      pauseButton.setAttribute("aria-pressed", "true");
+    }
+  });
+
+  const autoStart = new URLSearchParams(window.location.search).has("autostart");
+  buildGame(autoStart);
+  requestAnimationFrame(frame);
+})();
