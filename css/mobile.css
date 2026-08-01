@@ -1,197 +1,74 @@
-/* --------------------------------------------------------------------------
-   P.A.C v7.2 mobile viewport layout
+/* P.A.C v7.2.1 mobile correction
    Load after css/styles.css.
-   -------------------------------------------------------------------------- */
+*/
 
 :root {
   --pac-app-height: 100dvh;
-  --pac-app-width: 100vw;
 }
 
-@media (max-width: 900px), (pointer: coarse) {
+/* Do not use "(pointer: coarse)" here.
+   It can trigger mobile styling on wide touch laptops and tablets.
+*/
+@media (max-width: 950px) {
   html,
   body {
     width: 100%;
     max-width: 100%;
-    min-height: 100%;
     overflow-x: hidden;
     overscroll-behavior: none;
   }
 
-  /* Lobby fits inside the available device viewport. */
   .lobby-screen {
     width: 100%;
     height: var(--pac-app-height, 100dvh);
     min-height: 0;
     padding:
-      max(8px, env(safe-area-inset-top))
-      max(8px, env(safe-area-inset-right))
-      max(8px, env(safe-area-inset-bottom))
-      max(8px, env(safe-area-inset-left));
+      max(12px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
     place-items: center;
     overflow: hidden;
   }
 
+  /* Main correction: keep the lobby as a centred panel, not a full-width slab. */
   .lobby-card,
   .account-lobby-card {
-    width: min(100%, 680px);
-    max-width: 100%;
-    max-height: calc(
-      var(--pac-app-height, 100dvh) -
-      max(16px, env(safe-area-inset-top)) -
-      max(16px, env(safe-area-inset-bottom))
-    );
-    margin: 0;
-    padding: clamp(14px, 2.5dvh, 24px) clamp(12px, 4vw, 20px);
+    width: min(560px, calc(100vw - 40px));
+    max-width: none;
+    max-height: calc(var(--pac-app-height, 100dvh) - 24px);
+    margin: 0 auto;
+    padding: clamp(16px, 2.4dvh, 24px) clamp(14px, 3.5vw, 22px);
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: thin;
-  }
-
-  .lobby-card::before,
-  .lobby-card::after {
-    top: 9px;
-    width: 34px;
-    height: 3px;
   }
 
   .lobby-score-marquee {
-    height: 24px;
-    margin-bottom: 8px;
-    font-size: 0.56rem;
-    line-height: 22px;
-  }
-
-  .lobby-title {
-    gap: 8px;
-    min-height: 0;
-    font-size: clamp(2rem, 12vw, 3.35rem);
-  }
-
-  .lobby-title .lobby-shadow-emblem {
-    width: 0.82em;
-    height: 0.82em;
+    width: min(100%, 470px);
   }
 
   .lobby-subtitle {
-    margin-top: 7px;
-    font-size: 0.78rem;
-    line-height: 1.35;
+    max-width: 430px;
   }
 
   .ghost-track,
   .in-game-creep-track {
-    height: clamp(62px, 10dvh, 82px);
-    margin: 10px auto 8px;
-  }
-
-  .lobby-creep-canvas {
-    height: clamp(62px, 10dvh, 82px);
-  }
-
-  .connection-status {
-    min-height: 18px;
-    margin: 3px 0 8px;
-    font-size: 0.68rem;
-  }
-
-  .lobby-choice {
-    gap: 10px;
-  }
-
-  .gold-3d-button,
-  .gold-3d-button.compact {
-    width: min(280px, 100%);
-    min-width: 0;
-    padding: 12px 14px;
-    font-size: 0.78rem;
+    width: min(100%, 460px);
   }
 
   .room-panel,
-  .waiting-room {
-    width: 100%;
-    max-width: 100%;
-    padding: 13px;
-  }
-
-  .account-form h2 {
-    margin-bottom: 10px;
-    font-size: 1.15rem;
-  }
-
-  .account-form .room-label {
-    margin-top: 8px;
-    margin-bottom: 5px;
+  .waiting-room,
+  .account-strip {
+    width: min(100%, 500px);
   }
 
   .room-input,
   .account-form .room-input {
     width: 100%;
-    padding: 10px 11px;
     font-size: 16px;
   }
 
-  .room-note,
-  .account-name-note {
-    min-height: 0;
-    margin: 5px 0 9px;
-    font-size: 0.7rem;
-    line-height: 1.3;
-  }
-
-  .room-actions,
-  .room-id-row {
-    gap: 9px;
-  }
-
-  .account-strip {
-    width: 100%;
-    margin-bottom: 10px;
-    padding: 8px 10px;
-  }
-
-  .waiting-room-meta {
-    margin: 9px 0 7px;
-  }
-
-  .room-player-list {
-    gap: 4px;
-  }
-
-  .room-player {
-    grid-template-columns: 34px minmax(0, 1fr) auto;
-    gap: 7px;
-    min-height: 38px;
-    padding: 5px 7px;
-  }
-
-  .player-slot {
-    min-height: 26px;
-  }
-
-  .lobby-screen.panel-open .lobby-subtitle {
-    display: none;
-  }
-
-  .lobby-screen.panel-open .ghost-track,
-  .lobby-screen.panel-open .in-game-creep-track,
-  .lobby-screen.panel-open .lobby-creep-canvas {
-    height: 52px;
-    margin: 5px auto 7px;
-  }
-
-  .lobby-pacman {
-    width: clamp(42px, 12vw, 58px);
-    opacity: 0.3;
-    pointer-events: none;
-  }
-
-  .lobby-footer {
-    display: none;
-  }
-
-  /* In-game screen is locked to the device viewport. */
   body:not(.lobby-open) {
     width: 100%;
     height: var(--pac-app-height, 100dvh);
@@ -202,14 +79,11 @@
   #gameShell[aria-hidden="false"] {
     position: fixed;
     inset: 0;
-    z-index: 20;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 5px;
     width: 100%;
     height: var(--pac-app-height, 100dvh);
-    max-width: 100%;
-    max-height: var(--pac-app-height, 100dvh);
     margin: 0;
     padding:
       max(4px, env(safe-area-inset-top))
@@ -219,67 +93,40 @@
     overflow: hidden;
   }
 
-  #gameShell .game-header {
-    display: block;
-    min-width: 0;
-    margin: 0;
-  }
-
   #gameShell .title-block {
     display: none;
   }
 
+  #gameShell .game-header {
+    display: block;
+    margin: 0;
+  }
+
   #gameShell .hud {
-    display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
-    min-width: 0;
-    border: 1px solid #30393f;
     box-shadow: none;
   }
 
-  #gameShell .hud-item,
-  #gameShell .hud-item:nth-child(3),
-  #gameShell .hud-item:last-child,
-  #gameShell .hud-item:nth-child(n + 4) {
+  #gameShell .hud-item {
     min-width: 0;
     padding: 3px 5px;
-    border-right: 1px solid #30393f;
-    border-bottom: 1px solid #30393f;
-  }
-
-  #gameShell .hud-item:nth-child(3n) {
-    border-right: 0;
-  }
-
-  #gameShell .hud-item:nth-child(n + 4) {
-    border-bottom: 0;
   }
 
   #gameShell .hud-item span {
-    overflow: hidden;
     font-size: 0.47rem;
-    letter-spacing: 0.04em;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   #gameShell .hud-item strong {
-    overflow: hidden;
     margin-top: 1px;
     font-size: 0.74rem;
-    line-height: 1.05;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   #gameShell .board-wrap {
-    align-self: stretch;
     width: 100%;
     height: 100%;
     min-height: 0;
     margin: 0;
-    border-width: 1px;
     box-shadow: none;
   }
 
@@ -292,7 +139,6 @@
 
   #gameShell .controls-panel {
     display: block;
-    min-height: 0;
     margin: 0;
   }
 
@@ -300,16 +146,13 @@
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 4px;
-    width: 100%;
   }
 
   #gameShell .button-row button {
     min-width: 0;
     padding: 7px 2px;
     overflow: hidden;
-    border-radius: 4px;
     font-size: 0.62rem;
-    line-height: 1;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -317,106 +160,48 @@
   #gameShell .legend {
     display: none;
   }
+}
 
-  #gameShell .swipe-hint {
-    bottom: 7px;
-    padding: 5px 9px;
-    font-size: 0.62rem;
+/* Normal portrait phones */
+@media (max-width: 600px) {
+  .lobby-card,
+  .account-lobby-card {
+    width: min(390px, calc(100vw - 28px));
+    padding: 16px 14px 18px;
   }
 
-  #gameShell .game-overlay {
-    padding: 12px;
+  .lobby-title {
+    font-size: clamp(2rem, 12vw, 3.1rem);
   }
 
-  #gameShell .overlay-panel {
-    width: min(92vw, 440px);
-    max-height: calc(var(--pac-app-height, 100dvh) - 40px);
-    padding: 20px;
-    overflow-y: auto;
+  .gold-3d-button,
+  .gold-3d-button.compact {
+    width: min(250px, 100%);
+    min-width: 0;
   }
 }
 
-/* Short landscape phones use a single-row HUD. */
-@media (pointer: coarse) and (orientation: landscape) and (max-height: 600px) {
-  #gameShell[aria-hidden="false"] {
-    gap: 3px;
-    padding:
-      max(2px, env(safe-area-inset-top))
-      max(3px, env(safe-area-inset-right))
-      max(2px, env(safe-area-inset-bottom))
-      max(3px, env(safe-area-inset-left));
-  }
-
-  #gameShell .hud {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-  }
-
-  #gameShell .hud-item,
-  #gameShell .hud-item:nth-child(3),
-  #gameShell .hud-item:last-child,
-  #gameShell .hud-item:nth-child(n + 4) {
-    padding: 2px 4px;
-    border-right: 1px solid #30393f;
-    border-bottom: 0;
-  }
-
-  #gameShell .hud-item:last-child {
-    border-right: 0;
-  }
-
-  #gameShell .hud-item span {
-    font-size: 0.4rem;
-  }
-
-  #gameShell .hud-item strong {
-    font-size: 0.66rem;
-  }
-
-  #gameShell .button-row button {
-    padding: 5px 2px;
-    font-size: 0.56rem;
-  }
-
+/* Very narrow phones */
+@media (max-width: 380px) {
   .lobby-card,
   .account-lobby-card {
+    width: min(350px, calc(100vw - 20px));
+    padding-right: 11px;
+    padding-left: 11px;
+  }
+}
+
+/* Short landscape phones */
+@media (orientation: landscape) and (max-width: 950px) and (max-height: 600px) {
+  .lobby-card,
+  .account-lobby-card {
+    width: min(560px, calc(100vw - 24px));
     max-height: calc(var(--pac-app-height, 100dvh) - 8px);
     padding-top: 10px;
     padding-bottom: 10px;
   }
 
-  .lobby-subtitle,
-  .lobby-pacman {
-    display: none;
-  }
-
-  .ghost-track,
-  .in-game-creep-track,
-  .lobby-creep-canvas {
-    height: 46px;
-    margin: 4px auto;
-  }
-}
-
-@media (max-width: 380px) {
-  .lobby-card,
-  .account-lobby-card {
-    padding-right: 10px;
-    padding-left: 10px;
-  }
-
-  .lobby-title {
-    font-size: clamp(1.8rem, 13vw, 2.7rem);
-  }
-
-  #gameShell .hud-item span {
-    font-size: 0.42rem;
-  }
-
-  #gameShell .hud-item strong {
-    font-size: 0.68rem;
-  }
-
-  #gameShell .button-row button {
-    font-size: 0.56rem;
+  #gameShell .hud {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }

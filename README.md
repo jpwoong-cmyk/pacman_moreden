@@ -1,55 +1,56 @@
-# P.A.C v7.0 Multiplayer
+# P.A.C v7.2.1 Mobile Width Fix
 
-A framework-free Canvas game with Supabase accounts, game rooms, shared seeded maps, and visible remote players.
+Your current repository contains `css/mobile.css` and `js/mobile-viewport.js`,
+but `index.html` does not load them.
 
-## v7.0 changes
+## Replace these files
 
-- Starting pellet count increased from 48 to 180.
-- Pellet performance cap increased from 110 to 260.
-- The lobby parade now renders the exact same elemental creep artwork used inside the game.
-- The old lobby eyebrow is now a continuously moving high-score ticker with account names.
-- Lobby branding changed from Elemental Pacman to **P.A.C**.
-- The lobby title now includes a black shadow-creep emblem with red eyes and a gold/silver outline.
-- High scores are stored in Supabase and refreshed after a game ends.
-- `multiplayer/remote-players.js` is explicitly loaded before `main.js`, preventing the black-canvas startup error.
+- Replace `css/mobile.css`
+- Replace `js/mobile-viewport.js`
 
-## Existing multiplayer features
+## Edit index.html
 
-- Account name + password sign-up and login
-- Six-character game rooms
-- Join-in-progress rooms
-- Automatic host transfer
-- Same deterministic city for every player in a room
-- Gold local Pacman and silver-grey remote Pacmen
-- Mobile swipe controls
+Inside `<head>`, find:
 
-## Supabase update
+```html
+<link rel="stylesheet" href="css/styles.css">
+```
 
-For an existing project, run:
+Replace it with:
 
-`supabase/v7-leaderboard.sql`
+```html
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/mobile.css">
+```
 
-For a fresh project, run the complete:
+At the bottom, find:
 
-`supabase/setup.sql`
+```html
+<script src="js/lobby.js"></script>
+```
 
-Then configure your Project URL and Publishable key inside:
+Replace it with:
 
-`multiplayer/config.js`
+```html
+<script src="js/lobby.js"></script>
+<script src="js/mobile-viewport.js"></script>
+```
 
-## Run
+## Main correction
 
-Serve the folder through Vercel, GitHub Pages, or a local HTTP server. Avoid opening `index.html` directly through `file://`.
+The previous mobile file used:
 
+```css
+width: min(100%, 680px);
+```
 
-## v7.1 Audio Layer
+The corrected phone rule uses:
 
-Add these three files to the `audio/` folder:
+```css
+width: min(390px, calc(100vw - 28px));
+```
 
-- `lobby-theme.mp3`
-- `game-theme.mp3`
-- `danger-layer.mp3`
+This keeps the account lobby visibly centred with side margins.
 
-`js/audio-manager.js` controls playback. Lobby music starts after the first browser interaction, game music starts when a room launches, and the danger layer fades in when one or more local creeps detect the local Pacman. The danger layer fades out when detection ends.
-
-Browsers block autoplay before interaction, so the first click, tap, or keyboard input unlocks audio.
+The viewport script also no longer dispatches another `resize` event from within
+its own resize handler.
