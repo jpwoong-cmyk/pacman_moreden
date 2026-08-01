@@ -71,10 +71,10 @@
         throw new Error(window.PACMAN_SUPABASE_CONFIGURATION_ERROR);
       }
 
-      reportConnection("Connecting to Supabase…", "loading");
+      reportConnection("Connecting…", "loading");
       const session = await window.PacmanAuth.getSession();
       await loadIdentity(session);
-      reportConnection("Supabase connected", "connected");
+      reportConnection("Status Online", "connected");
 
       window.PacmanAuth.onAuthStateChange(async (_event, nextSession) => {
         try {
