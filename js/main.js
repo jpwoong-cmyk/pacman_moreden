@@ -149,6 +149,7 @@
     updateHud();
 
     if (startImmediately) {
+      window.PacmanAudio?.playGame();
       state.lastTime = performance.now();
       canvas.focus({ preventScroll: true });
       sendPlayerSnapshot();
@@ -197,6 +198,7 @@
     state.pacman.update(dt, state.map);
     state.remotePlayers?.update(dt);
     state.creeps.update(dt, state.pacman, state.elapsed, state.pellets);
+    window.PacmanAudio?.setDangerActive(state.creeps.alertedCount > 0);
 
     if (state.pellets.collectAt(state.pacman.x, state.pacman.y)) {
       state.score += 10;
@@ -231,6 +233,8 @@
     overlayText.textContent = `Room ${state.roomId} ended with ${state.score} points. The streets are ready for another run.`;
     startButton.textContent = "Play Again";
     overlay.classList.remove("hidden");
+    window.PacmanAudio?.setDangerActive(false);
+    window.PacmanAudio?.stopAll();
 
     if (window.PacmanLeaderboard) {
       void window.PacmanLeaderboard.submitScore(state.score)
@@ -402,6 +406,8 @@
   newMapButton.addEventListener("click", replayRoom);
   pauseButton.addEventListener("click", togglePause);
   leaveRoomButton.addEventListener("click", () => {
+    window.PacmanAudio?.setDangerActive(false);
+    window.PacmanAudio?.playLobby();
     state.running = false;
     state.paused = true;
     state.remotePlayers?.players.clear();
@@ -439,6 +445,8 @@
   });
 
   document.addEventListener("pacman:room-left", () => {
+    window.PacmanAudio?.setDangerActive(false);
+    window.PacmanAudio?.playLobby();
     state.running = false;
     state.remotePlayers?.players.clear();
   });

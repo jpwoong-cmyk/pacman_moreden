@@ -1,0 +1,7 @@
+Place your three MP3 files in this folder using these exact names:
+
+lobby-theme.mp3
+game-theme.mp3
+danger-layer.mp3
+
+The audio manager already points to these paths.

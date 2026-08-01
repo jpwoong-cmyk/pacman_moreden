@@ -83,6 +83,7 @@
     gameShell.setAttribute("inert", "");
     gameShell.setAttribute("aria-hidden", "true");
     document.body.classList.add("lobby-open");
+    window.PacmanAudio?.playLobby();
   }
 
   function launchGame(room, players = [], currentUserId = null) {
@@ -94,6 +95,7 @@
     gameShell.removeAttribute("inert");
     gameShell.setAttribute("aria-hidden", "false");
     document.body.classList.remove("lobby-open");
+    window.PacmanAudio?.playGame();
 
     window.ElementalPacman.launchRoom(room, players, currentUserId);
   }

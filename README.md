@@ -40,3 +40,16 @@ Then configure your Project URL and Publishable key inside:
 ## Run
 
 Serve the folder through Vercel, GitHub Pages, or a local HTTP server. Avoid opening `index.html` directly through `file://`.
+
+
+## v7.1 Audio Layer
+
+Add these three files to the `audio/` folder:
+
+- `lobby-theme.mp3`
+- `game-theme.mp3`
+- `danger-layer.mp3`
+
+`js/audio-manager.js` controls playback. Lobby music starts after the first browser interaction, game music starts when a room launches, and the danger layer fades in when one or more local creeps detect the local Pacman. The danger layer fades out when detection ends.
+
+Browsers block autoplay before interaction, so the first click, tap, or keyboard input unlocks audio.
