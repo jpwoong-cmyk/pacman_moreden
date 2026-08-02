@@ -23,7 +23,7 @@
   const audio = {
     lobby: new Audio(TRACKS.lobby.src),
     game: new Audio(TRACKS.game.src),
-    danger: new Audio(TRACKS.danger.src)
+    danger: new Audio(TRACKS.danger.src),
     gameOver: new Audio(TRACKS.gameOver.src)
   };
 
