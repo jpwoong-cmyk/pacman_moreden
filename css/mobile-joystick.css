@@ -16,9 +16,75 @@
   width: var(--joystick-size);
   height: var(--joystick-size);
   transform: translateX(-50%);
+  transition: left 220ms ease;
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.mobile-joystick__side-switch {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+
+  display: grid;
+  place-items: center;
+
+  width: 32px;
+  height: 32px;
+  padding: 0;
+
+  border: 1px solid rgba(225, 231, 238, 0.7);
+  border-radius: 50%;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(103, 111, 121, 0.86),
+      rgba(15, 18, 22, 0.92)
+    );
+
+  color: rgba(245, 247, 250, 0.94);
+  font-size: 17px;
+  line-height: 1;
+
+  box-shadow:
+    0 6px 14px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+
+  transform: translateY(-50%);
+  pointer-events: auto;
+  touch-action: manipulation;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.mobile-joystick__side-switch:active {
+  transform:
+    translateY(-50%)
+    scale(0.92);
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(137, 146, 157, 0.9),
+      rgba(21, 25, 30, 0.96)
+    );
+}
+
+/* Joystick on the right means the switch appears on its left. */
+.mobile-joystick[data-side="right"]
+.mobile-joystick__side-switch {
+  left: auto;
+  right: calc(100% + 10px);
+}
+
+/* Joystick on the left means the switch appears on its right. */
+.mobile-joystick[data-side="left"]
+.mobile-joystick__side-switch {
+  left: calc(100% + 10px);
+  right: auto;
 }
 
 .mobile-joystick__base {
@@ -175,6 +241,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .mobile-joystick,
   .mobile-joystick__stick {
     transition: none;
   }

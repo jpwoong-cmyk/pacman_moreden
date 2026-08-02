@@ -2,6 +2,7 @@
   "use strict";
 
   const MOBILE_QUERY = "(max-width: 950px) and (pointer: coarse)";
+  const JOYSTICK_SIDE_KEY = "pacJoystickSide";
   const DIRECTION_BY_CODE = Object.freeze({
     ArrowUp: { x: 0, y: -1 },
     ArrowRight: { x: 1, y: 0 },
@@ -20,6 +21,15 @@
   joystick.setAttribute("aria-hidden", "false");
 
   joystick.innerHTML = `
+    <button
+      class="mobile-joystick__side-switch"
+      type="button"
+      aria-label="Move joystick to left side"
+      title="Move joystick to left side"
+    >
+      ⇆
+    </button>
+
     <div
       class="mobile-joystick__base"
       role="application"
@@ -38,7 +48,22 @@
   gameShell.appendChild(joystick);
 
   const base = joystick.querySelector(".mobile-joystick__base");
+  const sideSwitch = joystick.querySelector(
+    ".mobile-joystick__side-switch"
+  );
   const mobileMedia = window.matchMedia(MOBILE_QUERY);
+
+  function readJoystickSide() {
+    try {
+      return localStorage.getItem(JOYSTICK_SIDE_KEY) === "left"
+        ? "left"
+        : "right";
+    } catch (_error) {
+      return "right";
+    }
+  }
+
+  let joystickSide = readJoystickSide();
 
   const pointer = {
     active: false,
@@ -47,6 +72,27 @@
   };
 
   let positionFrame = 0;
+
+  function applyJoystickSide(side, persist = true) {
+    joystickSide = side === "left" ? "left" : "right";
+    joystick.dataset.side = joystickSide;
+
+    const nextSide = joystickSide === "right" ? "left" : "right";
+    const label = `Move joystick to ${nextSide} side`;
+
+    sideSwitch.setAttribute("aria-label", label);
+    sideSwitch.title = label;
+
+    if (persist) {
+      try {
+        localStorage.setItem(JOYSTICK_SIDE_KEY, joystickSide);
+      } catch (_error) {
+        // Continue without saving when storage is unavailable.
+      }
+    }
+
+    positionJoystick();
+  }
 
   function isMobileJoystickActive() {
     return mobileMedia.matches &&
@@ -120,6 +166,12 @@
 
     positionFrame = window.requestAnimationFrame(() => {
       const buttonRect = leaveRoomButton.getBoundingClientRect();
+
+      const viewportWidth =
+        window.visualViewport?.width ||
+        document.documentElement.clientWidth ||
+        window.innerWidth;
+
       const viewportHeight =
         window.visualViewport?.height ||
         document.documentElement.clientHeight ||
@@ -127,25 +179,47 @@
 
       if (buttonRect.width <= 0 || buttonRect.height <= 0) return;
 
-    const buttonCentre = buttonRect.left + buttonRect.width / 2;
-    const distanceBelowButton = Math.max(
-      0,
-      viewportHeight - buttonRect.bottom
-    );
-    const bottom = distanceBelowButton + buttonRect.height + 13;
+      const distanceBelowButton = Math.max(
+        0,
+        viewportHeight - buttonRect.bottom
+      );
 
-    const joystickRadius = joystick.offsetWidth / 2;
-    const rightSpacing = 18;
+      const bottom =
+        distanceBelowButton +
+        buttonRect.height +
+        13;
 
-    const safeLeft = Math.min(
-      buttonCentre,
-      window.innerWidth - joystickRadius - rightSpacing
-    );
+      const joystickRadius = joystick.offsetWidth / 2;
+      const edgeSpacing = 18;
 
-    joystick.style.left = `${safeLeft}px`;
-    joystick.style.bottom = `${bottom}px`;
+      const horizontalCentre =
+        joystickSide === "left"
+          ? joystickRadius + edgeSpacing
+          : viewportWidth - joystickRadius - edgeSpacing;
+
+      joystick.style.left = `${horizontalCentre}px`;
+      joystick.style.bottom = `${bottom}px`;
     });
   }
+
+  sideSwitch.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
+  });
+
+  sideSwitch.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    resetJoystick();
+
+    applyJoystickSide(
+      joystickSide === "right" ? "left" : "right"
+    );
+
+    if (navigator.vibrate) {
+      navigator.vibrate(12);
+    }
+  });
 
   base.addEventListener("pointerdown", (event) => {
     if (!isMobileJoystickActive()) return;
@@ -214,5 +288,5 @@
   document.addEventListener("pacman:room-left", resetJoystick);
   document.addEventListener("pacman:room-closed", resetJoystick);
 
-  positionJoystick();
+  applyJoystickSide(joystickSide, false);
 })();
