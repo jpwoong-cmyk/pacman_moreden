@@ -42,6 +42,12 @@
   const ELITE_TYPES = ["speed", "sight", "eater"];
   const ELITE_BEHAVIORS = ["chase", "predict", "erratic", "intercept"];
 
+  const CHASE_SIGHT_RADIUS = 16;
+  const CHASE_SPEED_MULTIPLIER = 1.12;
+  const CHASE_ACCELERATION_SECONDS = 0.4;
+  const CHASE_DECELERATION_SECONDS = 0.6;
+  const NORMAL_GHOST_SPEED_CAP = 5.75;
+
   function randomItem(items) {
     return items[Math.floor(Math.random() * items.length)];
   }
@@ -68,6 +74,7 @@
       this.canEatPellets = this.isElite && this.eliteType === "eater";
       this.alerted = false;
       this.targetUserId = null;
+      this.chaseSpeedMultiplier = 1;
       this.animOffset = Number.isFinite(Number(options.animOffset))
         ? Number(options.animOffset)
         : Math.random() * Math.PI * 2;
@@ -101,8 +108,39 @@
     }
 
     visibleTarget(map, players = []) {
-      const visible = players
-        .filter((player) => player?.alive !== false)
+      const livingPlayers = players.filter(
+        (player) => player?.alive !== false
+      );
+
+      /*
+       * An alerted creep keeps tracking the same player while there is a
+       * clear line of sight. The longer chase radius prevents it from giving
+       * up halfway down a straight road, but a corner breaks the chase.
+       */
+      if (this.alerted && this.targetUserId) {
+        const trackedPlayer = livingPlayers.find(
+          (player) => player.userId === this.targetUserId
+        );
+
+        if (
+          trackedPlayer &&
+          map.hasLineOfSight(
+            this.x,
+            this.y,
+            trackedPlayer.x,
+            trackedPlayer.y,
+            CHASE_SIGHT_RADIUS
+          )
+        ) {
+          return trackedPlayer;
+        }
+      }
+
+      /*
+       * Calm creeps use their normal elemental or elite awareness radius to
+       * acquire the nearest visible player.
+       */
+      const visible = livingPlayers
         .filter((player) =>
           map.hasLineOfSight(
             this.x,
@@ -121,12 +159,46 @@
       return visible[0]?.player || null;
     }
 
+    updateChaseSpeed(dt, chasing) {
+      const targetMultiplier = chasing
+        ? CHASE_SPEED_MULTIPLIER
+        : 1;
+      const transitionSeconds = chasing
+        ? CHASE_ACCELERATION_SECONDS
+        : CHASE_DECELERATION_SECONDS;
+      const maximumChange =
+        (CHASE_SPEED_MULTIPLIER - 1) *
+        (dt / Math.max(0.01, transitionSeconds));
+
+      if (this.chaseSpeedMultiplier < targetMultiplier) {
+        this.chaseSpeedMultiplier = Math.min(
+          targetMultiplier,
+          this.chaseSpeedMultiplier + maximumChange
+        );
+      } else if (this.chaseSpeedMultiplier > targetMultiplier) {
+        this.chaseSpeedMultiplier = Math.max(
+          targetMultiplier,
+          this.chaseSpeedMultiplier - maximumChange
+        );
+      }
+    }
+
     update(dt, map, players, elapsed, pellets) {
       let target = this.visibleTarget(map, players);
       this.alerted = Boolean(target);
       this.targetUserId = target?.userId || null;
 
-      let remaining = this.profile.speed * dt;
+      this.updateChaseSpeed(dt, this.alerted);
+
+      const baseMovementSpeed =
+        Math.max(0, Number(this.profile.speed) || 0);
+      const acceleratedSpeed =
+        baseMovementSpeed * this.chaseSpeedMultiplier;
+      const movementSpeed = this.isElite
+        ? acceleratedSpeed
+        : Math.min(acceleratedSpeed, NORMAL_GHOST_SPEED_CAP);
+
+      let remaining = movementSpeed * dt;
       let safety = 0;
 
       while (remaining > 0.0001 && safety < 7) {
@@ -182,6 +254,13 @@
       };
       this.alerted = Boolean(state.alerted);
       this.targetUserId = state.targetUserId || null;
+      this.chaseSpeedMultiplier = Math.max(
+        1,
+        Math.min(
+          CHASE_SPEED_MULTIPLIER,
+          Number(state.chaseSpeedMultiplier) || 1
+        )
+      );
 
       if (
         !this.hasNetworkState ||
@@ -223,6 +302,13 @@
       };
       this.alerted = Boolean(state.alerted);
       this.targetUserId = state.targetUserId || null;
+      this.chaseSpeedMultiplier = Math.max(
+        1,
+        Math.min(
+          CHASE_SPEED_MULTIPLIER,
+          Number(state.chaseSpeedMultiplier) || 1
+        )
+      );
       this.hasNetworkState = true;
     }
 
@@ -239,6 +325,9 @@
         behavior: this.behavior,
         alerted: this.alerted,
         targetUserId: this.targetUserId,
+        chaseSpeedMultiplier: Number(
+          this.chaseSpeedMultiplier.toFixed(4)
+        ),
         animOffset: this.animOffset
       };
     }
