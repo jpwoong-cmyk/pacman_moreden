@@ -6,7 +6,12 @@
   const WORLD_SNAPSHOT_INTERVAL = 2;
   const WORLD_SAVE_INTERVAL = 5;
   const STARTING_PELLET_COUNT = 180;
-  const RESPAWN_DELAY_SECONDS = 3;
+  const BASE_PACMAN_SPEED = 5.8;
+  const RUSH_SPEED_MULTIPLIER = 1.25;
+  const RUSH_SECONDS_PER_PILL = 8;
+  const POWERUP_SPAWN_INTERVAL = 25;
+  const SHIELD_GRACE_SECONDS = 1.25;
+  const HUNTER_GRACE_SECONDS = 0.85;
 
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
@@ -30,6 +35,7 @@
   const state = {
     map: null,
     pellets: null,
+    powerups: null,
     pacman: null,
     creeps: null,
     remotePlayers: null,
@@ -41,7 +47,7 @@
     mapSeed: 1,
     scores: new Map(),
     alive: new Map(),
-    respawnAt: new Map(),
+    powers: new Map(),
     alertedUserIds: new Set(),
     running: false,
     worldReady: false,
@@ -50,6 +56,7 @@
     depthMode: true,
     elapsed: 0,
     spawnTimer: 10,
+    powerupSpawnTimer: POWERUP_SPAWN_INTERVAL,
     broadcastAccumulator: 0,
     worldFrameAccumulator: 0,
     worldSnapshotAccumulator: 0,
@@ -143,6 +150,37 @@
     return Math.max(0, Number(state.scores.get(state.currentUserId)) || 0);
   }
 
+  function defaultPowerState() {
+    return {
+      shield: 0,
+      hunter: 0,
+      rushUntil: 0,
+      graceUntil: 0
+    };
+  }
+
+  function normalisePowerState(value) {
+    return {
+      shield: Math.max(0, Math.floor(Number(value?.shield) || 0)),
+      hunter: Math.max(0, Math.floor(Number(value?.hunter) || 0)),
+      rushUntil: Math.max(0, Number(value?.rushUntil) || 0),
+      graceUntil: Math.max(0, Number(value?.graceUntil) || 0)
+    };
+  }
+
+  function getPowerState(userId) {
+    if (!state.powers.has(userId)) {
+      state.powers.set(userId, defaultPowerState());
+    }
+    return state.powers.get(userId);
+  }
+
+  function setPowerState(userId, value) {
+    const clean = normalisePowerState(value);
+    state.powers.set(userId, clean);
+    return clean;
+  }
+
   function startTileForUser(userId) {
     const member = state.roster.find((item) => item.user_id === userId);
     return state.map.getPlayerStartTile(member?.player_slot || 1);
@@ -150,21 +188,15 @@
 
   function ensureRosterState() {
     state.roster.forEach((member) => {
-      if (!state.scores.has(member.user_id)) {
-        state.scores.set(member.user_id, 0);
-      }
-      if (!state.alive.has(member.user_id)) {
-        state.alive.set(member.user_id, true);
-      }
+      if (!state.scores.has(member.user_id)) state.scores.set(member.user_id, 0);
+      if (!state.alive.has(member.user_id)) state.alive.set(member.user_id, true);
+      getPowerState(member.user_id);
     });
 
     if (state.currentUserId) {
-      if (!state.scores.has(state.currentUserId)) {
-        state.scores.set(state.currentUserId, 0);
-      }
-      if (!state.alive.has(state.currentUserId)) {
-        state.alive.set(state.currentUserId, true);
-      }
+      if (!state.scores.has(state.currentUserId)) state.scores.set(state.currentUserId, 0);
+      if (!state.alive.has(state.currentUserId)) state.alive.set(state.currentUserId, true);
+      getPowerState(state.currentUserId);
     }
   }
 
@@ -172,18 +204,14 @@
     state.mapSeed = mapSeed;
     state.map = new MazeMap(65, 49, state.mapSeed);
     state.pellets = new PelletManager(state.map);
+    state.powerups = new PowerUpManager(state.map);
     state.creeps = new CreepManager(state.map);
 
     if (resetLocalPlayer || !state.pacman) {
-      state.pacman = new Pacman(
-        state.map.getPlayerStartTile(state.playerSlot)
-      );
+      state.pacman = new Pacman(state.map.getPlayerStartTile(state.playerSlot));
     }
 
-    state.remotePlayers = new RemotePlayerManager(
-      state.map,
-      state.currentUserId
-    );
+    state.remotePlayers = new RemotePlayerManager(state.map, state.currentUserId);
     state.remotePlayers.setRoster(state.roster);
   }
 
@@ -202,22 +230,21 @@
   }
 
   function showSyncOverlay() {
+    window.PacmanPowerUpsUI?.hideRoundOver();
     setOverlay(
       "Synchronising shared city",
-      "Loading the room's shared pellets, creeps, scores, and timers…",
+      "Loading the room's shared pellets, pills, creeps, scores, and timers…",
       "",
       "sync"
     );
   }
 
-  function showCaughtOverlay() {
+  function showRoundOver() {
+    if (state.localCaught) return;
     state.localCaught = true;
-    setOverlay(
-      "Caught in the shared city",
-      `You keep your ${localScore()} points. Respawn begins automatically in ${RESPAWN_DELAY_SECONDS} seconds.`,
-      "Watch City",
-      "watch"
-    );
+    hideOverlay();
+    window.PacmanPowerUpsUI?.showRoundOver(localScore());
+    window.PacmanAudio?.setDangerActive(false);
 
     if (window.PacmanLeaderboard) {
       void window.PacmanLeaderboard.submitScore(localScore())
@@ -230,30 +257,30 @@
     const nextAlive = alive !== false;
     state.alive.set(state.currentUserId, nextAlive);
 
-    if (!nextAlive && !state.localCaught) {
-      showCaughtOverlay();
-      window.PacmanAudio?.setDangerActive(false);
+    if (!nextAlive) {
+      showRoundOver();
       return;
     }
 
-    if (nextAlive && state.localCaught) {
-      state.localCaught = false;
+    if (!state.localCaught) return;
+    state.localCaught = false;
 
-      const x = Number(playerState?.x);
-      const y = Number(playerState?.y);
-      if (Number.isFinite(x) && Number.isFinite(y)) {
-        state.pacman.x = x;
-        state.pacman.y = y;
-      } else {
-        const start = startTileForUser(state.currentUserId);
-        state.pacman.x = start.x;
-        state.pacman.y = start.y;
-      }
-
-      state.pacman.dir = { x: 0, y: 0 };
-      hideOverlay();
-      canvas.focus({ preventScroll: true });
+    const x = Number(playerState?.x);
+    const y = Number(playerState?.y);
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      state.pacman.x = x;
+      state.pacman.y = y;
+    } else {
+      const start = startTileForUser(state.currentUserId);
+      state.pacman.x = start.x;
+      state.pacman.y = start.y;
     }
+
+    state.pacman.dir = { x: 0, y: 0 };
+    state.pacman.nextDir = { x: 0, y: 0 };
+    window.PacmanPowerUpsUI?.hideRoundOver();
+    hideOverlay();
+    canvas.focus({ preventScroll: true });
   }
 
   function playerStatesFromActors(actors) {
@@ -285,26 +312,25 @@
   }
 
   function allPlayerActors() {
-    return [localActor(), ...state.remotePlayers.getPlayerActors()].map(
-      (actor) => ({
-        ...actor,
-        alive: state.alive.get(actor.userId) !== false,
-        score: Math.max(0, Number(state.scores.get(actor.userId)) || 0)
-      })
-    );
+    return [localActor(), ...state.remotePlayers.getPlayerActors()].map((actor) => ({
+      ...actor,
+      alive: state.alive.get(actor.userId) !== false,
+      score: Math.max(0, Number(state.scores.get(actor.userId)) || 0)
+    }));
   }
 
   function buildWorldFrame() {
     const actors = allPlayerActors();
-
     return {
       elapsed: state.elapsed,
       spawnTimer: state.spawnTimer,
+      powerupSpawnTimer: state.powerupSpawnTimer,
       paused: state.sharedPaused,
+      powerups: state.powerups.toSnapshot(),
+      powers: objectFromMap(state.powers),
       creeps: state.creeps.toSnapshot(),
       scores: objectFromMap(state.scores),
       alive: objectFromMap(state.alive),
-      respawnAt: objectFromMap(state.respawnAt),
       alertedUserIds: state.creeps.getAlertedUserIds(),
       players: playerStatesFromActors(actors)
     };
@@ -312,17 +338,19 @@
 
   function buildWorldSnapshot() {
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       roomId: state.room?.id || null,
       mapSeed: state.mapSeed,
       elapsed: state.elapsed,
       spawnTimer: state.spawnTimer,
+      powerupSpawnTimer: state.powerupSpawnTimer,
       paused: state.sharedPaused,
       pellets: state.pellets.toSnapshot(),
+      powerups: state.powerups.toSnapshot(),
+      powers: objectFromMap(state.powers),
       creeps: state.creeps.toSnapshot(),
       scores: objectFromMap(state.scores),
       alive: objectFromMap(state.alive),
-      respawnAt: objectFromMap(state.respawnAt),
       alertedUserIds: Array.from(state.alertedUserIds),
       players: playerStatesFromActors(allPlayerActors())
     };
@@ -330,16 +358,10 @@
 
   function applyPlayerStates(playerStates = []) {
     state.remotePlayers.applyWorldPlayers(playerStates);
-
-    const local = playerStates.find(
-      (player) => player.userId === state.currentUserId
-    );
+    const local = playerStates.find((player) => player.userId === state.currentUserId);
 
     if (local) {
-      state.scores.set(
-        state.currentUserId,
-        Math.max(0, Number(local.score) || 0)
-      );
+      state.scores.set(state.currentUserId, Math.max(0, Number(local.score) || 0));
       applyLocalAliveState(local.alive !== false, local);
     }
   }
@@ -354,30 +376,41 @@
 
     state.elapsed = Math.max(0, Number(snapshot.elapsed) || 0);
     state.spawnTimer = Math.max(0, Number(snapshot.spawnTimer) || 0);
+    state.powerupSpawnTimer = Math.max(
+      0,
+      Number(snapshot.powerupSpawnTimer) || POWERUP_SPAWN_INTERVAL
+    );
     state.sharedPaused = Boolean(snapshot.paused);
-    state.scores = mapFromObject(snapshot.scores, (score) =>
-      Math.max(0, Number(score) || 0)
-    );
+    state.scores = mapFromObject(snapshot.scores, (score) => Math.max(0, Number(score) || 0));
     state.alive = mapFromObject(snapshot.alive, (alive) => alive !== false);
-    state.respawnAt = mapFromObject(snapshot.respawnAt, (time) =>
-      Math.max(0, Number(time) || 0)
-    );
+    state.powers = mapFromObject(snapshot.powers, normalisePowerState);
     state.alertedUserIds = new Set(snapshot.alertedUserIds || []);
 
     ensureRosterState();
     state.pellets.applySnapshot(snapshot.pellets || []);
+    state.powerups.applySnapshot(snapshot.powerups || []);
     state.creeps.applySnapshot(snapshot.creeps || []);
     applyPlayerStates(snapshot.players || []);
+
+    if (isHost() && !Array.isArray(snapshot.powerups)) {
+      state.powerups.spawnInitial(
+        powerupSpawnExclusions(allPlayerActors())
+      );
+    }
 
     state.worldReady = true;
     pauseButton.textContent = state.sharedPaused ? "Resume" : "Pause";
     pauseButton.setAttribute("aria-pressed", String(state.sharedPaused));
     updateAuthorityControls();
 
-    if (localAlive()) hideOverlay();
+    if (localAlive()) {
+      state.localCaught = false;
+      window.PacmanPowerUpsUI?.hideRoundOver();
+      hideOverlay();
+    }
 
     window.PacmanAudio?.setDangerActive(
-      state.alertedUserIds.has(state.currentUserId)
+      localAlive() && state.alertedUserIds.has(state.currentUserId)
     );
     updateHud();
     return true;
@@ -388,17 +421,18 @@
 
     state.elapsed = Math.max(0, Number(frame.elapsed) || 0);
     state.spawnTimer = Math.max(0, Number(frame.spawnTimer) || 0);
+    state.powerupSpawnTimer = Math.max(
+      0,
+      Number(frame.powerupSpawnTimer) || POWERUP_SPAWN_INTERVAL
+    );
     state.sharedPaused = Boolean(frame.paused);
-    state.scores = mapFromObject(frame.scores, (score) =>
-      Math.max(0, Number(score) || 0)
-    );
+    state.scores = mapFromObject(frame.scores, (score) => Math.max(0, Number(score) || 0));
     state.alive = mapFromObject(frame.alive, (alive) => alive !== false);
-    state.respawnAt = mapFromObject(frame.respawnAt, (time) =>
-      Math.max(0, Number(time) || 0)
-    );
+    state.powers = mapFromObject(frame.powers, normalisePowerState);
     state.alertedUserIds = new Set(frame.alertedUserIds || []);
 
     ensureRosterState();
+    state.powerups.applySnapshot(frame.powerups || []);
     state.creeps.applyFrame(frame.creeps || []);
     applyPlayerStates(frame.players || []);
     state.worldReady = true;
@@ -406,7 +440,7 @@
     pauseButton.textContent = state.sharedPaused ? "Resume" : "Pause";
     pauseButton.setAttribute("aria-pressed", String(state.sharedPaused));
     window.PacmanAudio?.setDangerActive(
-      state.alertedUserIds.has(state.currentUserId)
+      localAlive() && state.alertedUserIds.has(state.currentUserId)
     );
     updateHud();
   }
@@ -418,34 +452,41 @@
       (event.removals || []).forEach((removal) => {
         state.pellets.removeByKey(removal.key, { track: false });
         if (removal.userId) {
-          state.scores.set(
-            removal.userId,
-            Math.max(0, Number(removal.score) || 0)
-          );
+          state.scores.set(removal.userId, Math.max(0, Number(removal.score) || 0));
         }
       });
     } else if (event.type === "pellets-spawned") {
       state.pellets.addMany(event.pellets || []);
-    } else if (event.type === "player-caught") {
-      state.alive.set(event.userId, false);
-      state.respawnAt.set(
-        event.userId,
-        Math.max(0, Number(event.respawnAt) || 0)
+    } else if (event.type === "powerup-spawned") {
+      state.powerups.addPowerUp(event.powerUp);
+    } else if (event.type === "powerup-collected") {
+      state.powerups.removeById(event.powerUpId);
+      if (event.userId) setPowerState(event.userId, event.powers);
+    } else if (event.type === "shield-consumed") {
+      if (event.userId) setPowerState(event.userId, event.powers);
+    } else if (event.type === "ghost-eaten") {
+      state.creeps.creeps = state.creeps.creeps.filter(
+        (creep) => creep.id !== event.creepId
       );
-      state.remotePlayers.setAlive(event.userId, false);
-
-      if (event.userId === state.currentUserId) {
-        applyLocalAliveState(false);
+      if (event.userId) {
+        state.scores.set(event.userId, Math.max(0, Number(event.score) || 0));
+        setPowerState(event.userId, event.powers);
       }
-    } else if (event.type === "player-respawned") {
+    } else if (event.type === "round-ended" || event.type === "player-caught") {
+      state.alive.set(event.userId, false);
+      if (event.userId) {
+        state.scores.set(event.userId, Math.max(0, Number(event.score) || 0));
+        setPowerState(event.userId, event.powers || defaultPowerState());
+      }
+      state.remotePlayers.setAlive(event.userId, false);
+      if (event.userId === state.currentUserId) applyLocalAliveState(false);
+    } else if (event.type === "player-restarted") {
       state.alive.set(event.userId, true);
-      state.respawnAt.delete(event.userId);
+      state.scores.set(event.userId, 0);
+      setPowerState(event.userId, event.powers || defaultPowerState());
       state.remotePlayers.setAlive(event.userId, true);
       state.remotePlayers.setPosition(event.userId, event);
-
-      if (event.userId === state.currentUserId) {
-        applyLocalAliveState(true, event);
-      }
+      if (event.userId === state.currentUserId) applyLocalAliveState(true, event);
     } else if (event.type === "pause-changed") {
       state.sharedPaused = Boolean(event.paused);
     }
@@ -458,7 +499,6 @@
 
     try {
       const persisted = await window.PacmanWorldSync.loadPersisted();
-
       if (persisted?.snapshot) {
         window.PacmanWorldSync.adoptVersion(persisted.version);
         applyWorldSnapshot(persisted.snapshot);
@@ -466,22 +506,15 @@
 
       if (isHost()) {
         if (!state.worldReady) createInitialSharedWorld(state.mapSeed);
-        const envelope = window.PacmanWorldSync.sendSnapshot(
-          buildWorldSnapshot()
-        );
+        const envelope = window.PacmanWorldSync.sendSnapshot(buildWorldSnapshot());
         if (envelope) {
-          void window.PacmanWorldSync.savePersisted(
-            buildWorldSnapshot()
-          ).catch(() => {});
+          void window.PacmanWorldSync.savePersisted(buildWorldSnapshot()).catch(() => {});
         }
       } else {
         window.PacmanWorldSync.requestSnapshot();
-
         if (!state.worldReady) {
           window.setTimeout(() => {
-            if (!state.worldReady) {
-              window.PacmanWorldSync.requestSnapshot();
-            }
+            if (!state.worldReady) window.PacmanWorldSync.requestSnapshot();
           }, 1200);
         }
       }
@@ -492,7 +525,7 @@
       } else {
         setOverlay(
           "Shared city unavailable",
-          `${error.message} Run supabase/v8-shared-world.sql, then reload.`,
+          `${error.message} Run the existing shared-world SQL, then reload.`,
           "Leave Room",
           "leave"
         );
@@ -500,26 +533,40 @@
     }
   }
 
+  function powerupSpawnExclusions(actors = []) {
+    return [
+      ...actors,
+      ...state.map.spawnTiles,
+      ...state.creeps.creeps,
+      ...state.pellets.toSnapshot(),
+      ...state.powerups.toSnapshot()
+    ];
+  }
+
   function createInitialSharedWorld(mapSeed) {
     createGameObjects(mapSeed, true);
     state.scores = new Map();
     state.alive = new Map();
-    state.respawnAt = new Map();
+    state.powers = new Map();
     state.alertedUserIds = new Set();
     ensureRosterState();
 
     state.elapsed = 0;
     state.spawnTimer = 10;
+    state.powerupSpawnTimer = POWERUP_SPAWN_INTERVAL;
     state.sharedPaused = false;
     state.worldReady = true;
     state.worldFrameAccumulator = 0;
     state.worldSnapshotAccumulator = 0;
     state.worldSaveAccumulator = 0;
+    state.localCaught = false;
 
     const exclusions = [state.pacman, ...state.map.spawnTiles];
     state.pellets.spawn(STARTING_PELLET_COUNT, exclusions);
     state.pellets.drainRemovals();
     state.creeps.spawnCornerWave();
+    state.powerups.spawnInitial(powerupSpawnExclusions(allPlayerActors()));
+    window.PacmanPowerUpsUI?.hideRoundOver();
     hideOverlay();
     updateAuthorityControls();
     updateHud();
@@ -555,7 +602,7 @@
     createGameObjects(state.mapSeed, true);
     state.scores = new Map();
     state.alive = new Map();
-    state.respawnAt = new Map();
+    state.powers = new Map();
     ensureRosterState();
 
     window.PacmanWorldSync?.stop();
@@ -595,11 +642,9 @@
 
   function togglePause() {
     if (!state.running || !state.worldReady || !isHost()) return;
-
     state.sharedPaused = !state.sharedPaused;
     pauseButton.textContent = state.sharedPaused ? "Resume" : "Pause";
     pauseButton.setAttribute("aria-pressed", String(state.sharedPaused));
-
     window.PacmanWorldSync.sendEvent({
       type: "pause-changed",
       paused: state.sharedPaused
@@ -631,7 +676,7 @@
     });
   }
 
-  function resolvePelletsAndCreepEating(actors, dt) {
+  function resolvePelletsAndCreepMovement(actors, dt) {
     const collectors = new Map();
 
     actors.forEach((actor) => {
@@ -640,12 +685,7 @@
       if (pellet) collectors.set(pellet.key, actor.userId);
     });
 
-    state.creeps.update(
-      dt,
-      actors,
-      state.elapsed,
-      state.pellets
-    );
+    state.creeps.update(dt, actors, state.elapsed, state.pellets);
 
     const removed = state.pellets.drainRemovals();
     if (!removed.length) return;
@@ -653,94 +693,195 @@
     const removals = removed.map((pellet) => {
       const userId = collectors.get(pellet.key) || null;
       let score = null;
-
       if (userId) {
         score = Math.max(0, Number(state.scores.get(userId)) || 0) + 10;
         state.scores.set(userId, score);
       }
-
-      return {
-        key: pellet.key,
-        userId,
-        score
-      };
+      return { key: pellet.key, userId, score };
     });
 
+    window.PacmanWorldSync.sendEvent({ type: "pellets-removed", removals });
+  }
+
+  function applyPickup(userId, type) {
+    const powers = getPowerState(userId);
+
+    if (type === "shield") {
+      powers.shield += 1;
+    } else if (type === "rush") {
+      powers.rushUntil = Math.max(state.elapsed, powers.rushUntil) + RUSH_SECONDS_PER_PILL;
+    } else if (type === "hunter") {
+      powers.hunter += 1;
+    }
+
+    return normalisePowerState(powers);
+  }
+
+  function resolvePowerUpCollections(actors) {
+    const pickups = state.powerups.collectForActors(actors);
+    pickups.forEach(({ powerUp, userId }) => {
+      const powers = applyPickup(userId, powerUp.type);
+      window.PacmanWorldSync.sendEvent({
+        type: "powerup-collected",
+        powerUpId: powerUp.id,
+        powerUpType: powerUp.type,
+        userId,
+        powers
+      });
+    });
+  }
+
+  function nearestCollidingCreep(player) {
+    return state.creeps.creeps
+      .map((creep) => ({
+        creep,
+        distance: Math.hypot(creep.x - player.x, creep.y - player.y)
+      }))
+      .filter(
+        (item) =>
+          item.distance <
+          item.creep.radius + (Number(player.radius) || 0.34) - 0.08
+      )
+      .sort((a, b) => a.distance - b.distance)[0]?.creep || null;
+  }
+
+  function endPlayerRound(userId) {
+    const score = Math.max(0, Number(state.scores.get(userId)) || 0);
+    const clearedPowers = defaultPowerState();
+    state.alive.set(userId, false);
+    state.powers.set(userId, clearedPowers);
+    state.remotePlayers.setAlive(userId, false);
+
+    if (userId === state.currentUserId) applyLocalAliveState(false);
+
     window.PacmanWorldSync.sendEvent({
-      type: "pellets-removed",
-      removals
+      type: "round-ended",
+      userId,
+      score,
+      powers: clearedPowers
     });
   }
 
   function resolveCreepCollisions(actors) {
-    const caughtUserIds = state.creeps.collidingUserIds(actors);
+    actors.forEach((actor) => {
+      if (!actor?.userId || actor.alive === false) return;
+      const powers = getPowerState(actor.userId);
+      if (powers.graceUntil > state.elapsed) return;
 
-    caughtUserIds.forEach((userId) => {
-      if (state.alive.get(userId) === false) return;
+      const creep = nearestCollidingCreep(actor);
+      if (!creep) return;
 
-      const respawnAt = state.elapsed + RESPAWN_DELAY_SECONDS;
-      state.alive.set(userId, false);
-      state.respawnAt.set(userId, respawnAt);
-      state.remotePlayers.setAlive(userId, false);
+      if (powers.hunter > 0) {
+        powers.hunter -= 1;
+        powers.graceUntil = state.elapsed + HUNTER_GRACE_SECONDS;
+        state.creeps.creeps = state.creeps.creeps.filter(
+          (item) => item.id !== creep.id
+        );
+        const score = Math.max(0, Number(state.scores.get(actor.userId)) || 0) + 100;
+        state.scores.set(actor.userId, score);
 
-      if (userId === state.currentUserId) {
-        applyLocalAliveState(false);
+        window.PacmanWorldSync.sendEvent({
+          type: "ghost-eaten",
+          creepId: creep.id,
+          userId: actor.userId,
+          score,
+          powers: normalisePowerState(powers)
+        });
+        return;
       }
 
-      window.PacmanWorldSync.sendEvent({
-        type: "player-caught",
-        userId,
-        respawnAt
-      });
+      if (powers.shield > 0) {
+        powers.shield -= 1;
+        powers.graceUntil = state.elapsed + SHIELD_GRACE_SECONDS;
+        window.PacmanWorldSync.sendEvent({
+          type: "shield-consumed",
+          userId: actor.userId,
+          powers: normalisePowerState(powers)
+        });
+        return;
+      }
+
+      endPlayerRound(actor.userId);
     });
   }
 
-  function resolveRespawns() {
-    Array.from(state.respawnAt.entries()).forEach(([userId, time]) => {
-      if (state.elapsed < time) return;
+  function restartPlayerRound(userId) {
+    if (!userId || state.alive.get(userId) !== false) return false;
+    const knownPlayer =
+      userId === state.currentUserId ||
+      state.roster.some((member) => member.user_id === userId);
+    if (!knownPlayer) return false;
 
-      const start = startTileForUser(userId);
-      state.respawnAt.delete(userId);
-      state.alive.set(userId, true);
-      state.remotePlayers.setAlive(userId, true);
-      state.remotePlayers.setPosition(userId, start);
+    const start = startTileForUser(userId);
+    const powers = defaultPowerState();
+    state.scores.set(userId, 0);
+    state.alive.set(userId, true);
+    state.powers.set(userId, powers);
+    state.remotePlayers.setAlive(userId, true);
+    state.remotePlayers.setPosition(userId, start);
 
-      if (userId === state.currentUserId) {
-        applyLocalAliveState(true, start);
-      }
+    if (userId === state.currentUserId) applyLocalAliveState(true, start);
 
-      window.PacmanWorldSync.sendEvent({
-        type: "player-respawned",
-        userId,
-        x: start.x,
-        y: start.y
-      });
+    window.PacmanWorldSync.sendEvent({
+      type: "player-restarted",
+      userId,
+      x: start.x,
+      y: start.y,
+      score: 0,
+      powers
+    });
+    return true;
+  }
+
+  function requestRoundRestart() {
+    if (!state.running || !state.worldReady || localAlive()) return;
+
+    if (isHost()) {
+      restartPlayerRound(state.currentUserId);
+      return;
+    }
+
+    state.broadcastSequence += 1;
+    window.PacmanMultiplayer.broadcastPlayerState({
+      sequence: state.broadcastSequence,
+      roundAction: "restart-round",
+      x: Number(state.pacman.x.toFixed(4)),
+      y: Number(state.pacman.y.toFixed(4)),
+      dirX: 0,
+      dirY: 0,
+      angle: Number(state.pacman.angle || 0),
+      sentAt: Date.now()
     });
   }
 
   function updateHostWorld(dt) {
     const actors = allPlayerActors();
 
-    resolvePelletsAndCreepEating(actors, dt);
+    resolvePelletsAndCreepMovement(actors, dt);
+    resolvePowerUpCollections(actors);
     resolveCreepCollisions(actors);
-    resolveRespawns();
 
     state.spawnTimer -= dt;
     if (state.spawnTimer <= 0) {
-      const exclusions = [
-        ...actors,
-        ...state.map.spawnTiles,
-        ...state.creeps.creeps
-      ];
+      const exclusions = [...actors, ...state.map.spawnTiles, ...state.creeps.creeps];
       const pellets = state.pellets.spawn(5, exclusions);
       state.pellets.drainRemovals();
       state.creeps.spawnCornerWave();
       state.spawnTimer += 10;
 
       if (pellets.length) {
+        window.PacmanWorldSync.sendEvent({ type: "pellets-spawned", pellets });
+      }
+    }
+
+    state.powerupSpawnTimer -= dt;
+    if (state.powerupSpawnTimer <= 0) {
+      const powerUp = state.powerups.spawnRandom(powerupSpawnExclusions(actors));
+      state.powerupSpawnTimer += POWERUP_SPAWN_INTERVAL;
+      if (powerUp) {
         window.PacmanWorldSync.sendEvent({
-          type: "pellets-spawned",
-          pellets
+          type: "powerup-spawned",
+          powerUp
         });
       }
     }
@@ -762,9 +903,7 @@
 
     if (state.worldSaveAccumulator >= WORLD_SAVE_INTERVAL) {
       state.worldSaveAccumulator %= WORLD_SAVE_INTERVAL;
-      void window.PacmanWorldSync.savePersisted(
-        buildWorldSnapshot()
-      ).catch(() => {});
+      void window.PacmanWorldSync.savePersisted(buildWorldSnapshot()).catch(() => {});
     }
   }
 
@@ -781,6 +920,11 @@
       }
       return;
     }
+
+    const localPowers = getPowerState(state.currentUserId);
+    state.pacman.speed =
+      BASE_PACMAN_SPEED *
+      (localPowers.rushUntil > state.elapsed ? RUSH_SPEED_MULTIPLIER : 1);
 
     if (!state.sharedPaused && localAlive()) {
       state.pacman.update(dt, state.map);
@@ -816,12 +960,15 @@
     scoreValue.textContent = String(localScore());
     pelletValue.textContent = String(state.pellets ? state.pellets.count : 0);
     creepValue.textContent = String(state.creeps ? state.creeps.count : 0);
-    alertValue.textContent = String(
-      state.creeps ? state.creeps.alertedCount : 0
-    );
+    alertValue.textContent = String(state.creeps ? state.creeps.alertedCount : 0);
     spawnValue.textContent = state.worldReady
       ? `${Math.max(0, state.spawnTimer).toFixed(1)}s`
       : "SYNC";
+
+    window.PacmanPowerUpsUI?.update(
+      getPowerState(state.currentUserId),
+      state.elapsed
+    );
   }
 
   function chooseTileSize(width) {
@@ -854,11 +1001,8 @@
   function updateCamera() {
     if (!state.pacman) return;
     const { width, height, tileSize } = state.viewport;
-
-    state.viewport.offsetX =
-      width * 0.5 - (state.pacman.x + 0.5) * tileSize;
-    state.viewport.offsetY =
-      height * 0.5 - (state.pacman.y + 0.5) * tileSize;
+    state.viewport.offsetX = width * 0.5 - (state.pacman.x + 0.5) * tileSize;
+    state.viewport.offsetY = height * 0.5 - (state.pacman.y + 0.5) * tileSize;
   }
 
   function draw(timeSeconds) {
@@ -883,13 +1027,11 @@
     updateCamera();
     state.map.draw(ctx, state.viewport, state.depthMode);
     state.pellets.draw(ctx, state.viewport, timeSeconds);
+    state.powerups.draw(ctx, state.viewport, timeSeconds);
     state.creeps.draw(ctx, state.viewport, timeSeconds);
     state.remotePlayers?.draw(ctx, state.viewport);
 
-    if (localAlive()) {
-      state.pacman.draw(ctx, state.viewport);
-    }
-
+    if (localAlive()) state.pacman.draw(ctx, state.viewport);
     drawCameraVignette(width, height);
   }
 
@@ -927,14 +1069,11 @@
     ) {
       return;
     }
-
     state.pacman.setDirection(direction);
   }
 
   function readSwipe(event) {
-    if (!swipeState.active || event.pointerId !== swipeState.pointerId) {
-      return false;
-    }
+    if (!swipeState.active || event.pointerId !== swipeState.pointerId) return false;
 
     const dx = event.clientX - swipeState.x;
     const dy = event.clientY - swipeState.y;
@@ -942,7 +1081,6 @@
       24,
       Math.min(state.viewport.width, state.viewport.height) * 0.035
     );
-
     if (Math.max(Math.abs(dx), Math.abs(dy)) < threshold) return false;
 
     const direction =
@@ -954,7 +1092,6 @@
     swipeState.x = event.clientX;
     swipeState.y = event.clientY;
     swipeHint?.classList.add("used");
-
     if (navigator.vibrate) navigator.vibrate(8);
     return true;
   }
@@ -965,7 +1102,6 @@
       event.preventDefault();
       setDirection(direction);
     }
-
     if (event.code === "Space") {
       event.preventDefault();
       togglePause();
@@ -1000,31 +1136,22 @@
   canvas.addEventListener("pointercancel", finishSwipe);
 
   startButton.addEventListener("click", () => {
-    if (state.overlayAction === "watch") {
-      hideOverlay();
-    } else if (state.overlayAction === "leave") {
-      leaveRoomButton.click();
-    }
+    if (state.overlayAction === "leave") leaveRoomButton.click();
   });
 
   newMapButton.addEventListener("click", () => {
     if (!isHost() || !state.running) return;
-
     createInitialSharedWorld(generateMapSeed());
     window.PacmanWorldSync.sendEvent({ type: "world-reset" });
     window.PacmanWorldSync.sendSnapshot(buildWorldSnapshot());
-    void window.PacmanWorldSync.savePersisted(
-      buildWorldSnapshot()
-    ).catch(() => {});
+    void window.PacmanWorldSync.savePersisted(buildWorldSnapshot()).catch(() => {});
   });
 
   pauseButton.addEventListener("click", togglePause);
 
   leaveRoomButton.addEventListener("click", () => {
     if (isHost() && state.worldReady) {
-      void window.PacmanWorldSync.savePersisted(
-        buildWorldSnapshot()
-      ).catch(() => {});
+      void window.PacmanWorldSync.savePersisted(buildWorldSnapshot()).catch(() => {});
     }
 
     window.PacmanAudio?.setDangerActive(false);
@@ -1032,6 +1159,7 @@
     state.running = false;
     state.worldReady = false;
     state.remotePlayers?.players.clear();
+    window.PacmanPowerUpsUI?.hideRoundOver();
     hideOverlay();
     window.PacmanWorldSync?.stop();
 
@@ -1048,6 +1176,9 @@
     viewButton.setAttribute("aria-pressed", String(state.depthMode));
   });
 
+  document.addEventListener("pacman:restart-round-requested", requestRoundRestart);
+  document.addEventListener("pacman:exit-round-requested", () => leaveRoomButton.click());
+
   window.addEventListener("resize", resizeCanvas);
   document.addEventListener("visibilitychange", () => {
     state.lastTime = performance.now();
@@ -1055,12 +1186,22 @@
 
   document.addEventListener("pacman:remote-player-state", (event) => {
     if (!state.running || !state.remotePlayers) return;
-    state.remotePlayers.applyNetworkState(event.detail.payload);
+    const payload = event.detail.payload;
+
+    if (
+      isHost() &&
+      payload?.roundAction === "restart-round" &&
+      payload.userId
+    ) {
+      restartPlayerRound(payload.userId);
+      return;
+    }
+
+    state.remotePlayers.applyNetworkState(payload);
   });
 
   document.addEventListener("pacman:room-updated", (event) => {
     if (!state.room || event.detail.room?.id !== state.room.id) return;
-
     state.room = event.detail.room;
     state.roster = event.detail.players || [];
     state.remotePlayers?.setRoster(state.roster);
@@ -1075,7 +1216,6 @@
     state.room = event.detail.room;
     window.PacmanWorldSync?.updateRoom(state.room);
     updateAuthorityControls();
-
     if (!event.detail.isHost) return;
 
     try {
@@ -1094,7 +1234,6 @@
 
   document.addEventListener("pacman:world-snapshot-requested", (event) => {
     if (!isHost() || !state.worldReady) return;
-
     window.PacmanWorldSync.sendSnapshot(
       buildWorldSnapshot(),
       event.detail.requestUserId
@@ -1113,13 +1252,11 @@
 
   document.addEventListener("pacman:shared-world-event", (event) => {
     if (isHost()) return;
-
     if (event.detail.event?.type === "world-reset") {
       showSyncOverlay();
       window.PacmanWorldSync.requestSnapshot();
       return;
     }
-
     applyWorldEvent(event.detail.event);
   });
 
@@ -1129,6 +1266,7 @@
     state.running = false;
     state.worldReady = false;
     state.remotePlayers?.players.clear();
+    window.PacmanPowerUpsUI?.hideRoundOver();
     window.PacmanWorldSync?.stop();
   });
 
@@ -1138,7 +1276,8 @@
     getMapSeed: () => state.mapSeed,
     isRunning: () => state.running,
     isSharedWorldReady: () => state.worldReady,
-    isHost
+    isHost,
+    requestRoundRestart
   });
 
   void buildGame(

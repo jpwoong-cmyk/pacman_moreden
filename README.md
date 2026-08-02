@@ -1,76 +1,116 @@
-# P.A.C v9 Living City
+# P.A.C v9.1 Shared Power-Ups and Personal Game Over
+
+Built against the current `main` branch containing:
+
+- the v8 host-authoritative shared world;
+- shared creeps, pellets and scores;
+- the Living City module;
+- the mobile joystick.
 
 ## Add
 
-- `js/living-city.js`
+- `css/powerups.css`
+- `js/powerups.js`
+
+## Replace
+
+- `js/main.js`
 
 ## Edit
 
 Follow `INDEX-CHANGES.txt`.
 
-## Included changes
+## Supabase
 
-### City mix
+No new SQL is required. See `NO-SQL-CHANGE.txt`.
 
-The update keeps the existing procedural city style and replaces selected
-existing obstacle lots rather than adding a second layer of obstacles.
+## Power-ups
 
-The generated city now aims for:
+### Red and white Shield pill
 
-- housing blocks;
-- offices;
-- schools;
-- parks;
-- up to a controlled number of malls;
-- the existing shops, stalls, cones and generic buildings.
+- one automatic ghost-collision shield per pill;
+- charges stack without a hard cap;
+- one charge is consumed on contact;
+- grants 1.25 seconds of contact grace so overlapping ghosts do not remove
+  several charges in one instant.
 
-Three selected lots are converted into walkable parks. This adds open space
-rather than making the map narrower.
+### Blue and white Rush pill
 
-### Day and night
+- increases Pacman speed by 25%;
+- each pill adds 8 seconds;
+- duration stacks instead of speed multiplying repeatedly.
 
-- 120 seconds of day;
-- gradual dusk transition;
-- 120 seconds of night;
-- gradual dawn transition;
-- lamps and windows illuminate as night approaches;
-- daylight returns smoothly.
+### Black and white Hunter pill
 
-The cycle follows the shared match elapsed time, so players in the same room
-see the same part of the day/night cycle.
+- grants one ghost-eating charge;
+- charges stack without a hard cap;
+- touching any ghost consumes one charge;
+- the ghost disappears for every player;
+- the player receives 100 score;
+- grants 0.85 seconds of contact grace after eating the ghost.
 
-### Citizens
+Collision order is:
 
-Citizens are generated deterministically from the shared map seed.
+1. Hunter charge;
+2. Shield charge;
+3. personal round ends.
 
-Their routine is:
+## Shared spawning
 
-1. remain inside housing at the beginning of the day;
-2. leave home;
-3. walk along valid map paths;
-4. enter an office, school, mall/shop, or remain visible inside a park;
-5. leave before night;
-6. walk back home;
-7. remain indoors during the night.
+- one red, one blue and one black pill spawn when a new city starts;
+- one random pill attempts to spawn every 25 seconds;
+- maximum six pills may exist on the map;
+- pills do not spawn in the central start zone;
+- pills avoid players, creeps, pellets, existing pills and corner spawn tiles.
 
-Citizens are deliberately limited to roughly 14-22 so they do not clutter the
-map. Their appearance is smaller than the pellet orbit and uses the current
-non-pixel, miniature-city visual direction.
+## Pill rendering
 
-## Not changed
+The capsule is rendered in Canvas as a half-colour, half-white 3D pill with:
 
-- pellets;
-- creep spawning;
-- creep AI;
-- scores;
-- respawning;
-- multiplayer rooms;
-- mobile joystick;
-- Supabase schema.
+- moving light and dark gradients;
+- a centre seam;
+- a white specular highlight;
+- slow rotation and hover;
+- a glow matching its type.
 
-## GitHub status
+Its capsule thickness is exactly one rendered pixel larger than the current
+pellet diameter. The pill remains naturally longer than a round pellet: the
+rendered radius is `tileSize * 0.085 + 0.5`.
 
-An automatic branch creation was attempted but GitHub returned:
-`403 Resource not accessible by integration`.
+## Personal game over
 
-The repository was not modified automatically.
+There is no automatic revival.
+
+When a player is touched without a usable pill:
+
+- only that player's round ends;
+- other players and the shared city continue;
+- the player's score appears inside a clockwise rotating 3D score box;
+- `OK` requests a restart in the same active room;
+- `Exit` leaves the room and returns to the lobby.
+
+Restarting:
+
+- places the player back at the centre start area;
+- resets that player's round score to zero;
+- clears that player's pill inventory and Rush timer;
+- does not reset the map, pellets, ghosts, citizens, day/night cycle or other
+  players.
+
+A dead non-host player sends the restart request to the host through the existing
+`player-state` Realtime channel, so no additional Realtime event type or SQL
+function is needed.
+
+## Testing checklist
+
+1. Open one normal window and one Incognito window.
+2. Join the same room with two accounts.
+3. Confirm both players see the same three starting pills.
+4. Collect a pill in one window and confirm it disappears in both.
+5. Test Rush speed and stacked duration.
+6. Test Shield with one and multiple charges.
+7. Test Hunter and confirm the same ghost disappears for both players.
+8. Die without protection and confirm the other player continues.
+9. Press `OK` and confirm only the dead player restarts with score zero.
+10. Die again and press `Exit` to confirm the room remains active for others.
+11. Test the same flow when the host is the player who dies.
