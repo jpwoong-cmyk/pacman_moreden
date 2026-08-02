@@ -1096,11 +1096,37 @@
     return true;
   }
 
+  function isInteractiveKeyboardTarget(target) {
+    if (!(target instanceof Element)) return false;
+
+    return Boolean(
+      target.closest(
+        [
+          "input",
+          "textarea",
+          "select",
+          "button",
+          "a",
+          "[contenteditable='true']",
+          "[role='textbox']"
+        ].join(",")
+      )
+    );
+  }
+
   window.addEventListener("keydown", (event) => {
+    // Never steal keys while the user is typing or using a UI control.
+    if (isInteractiveKeyboardTarget(event.target)) return;
+
+    // Game controls should only intercept keys while a match is active.
+    if (!state.running) return;
+
     const direction = directionMap[event.code];
+
     if (direction) {
       event.preventDefault();
       setDirection(direction);
+      return;
     }
     if (event.code === "Space") {
       event.preventDefault();
