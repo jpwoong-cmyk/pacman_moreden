@@ -192,10 +192,7 @@
       const joystickRadius = joystick.offsetWidth / 2;
       const edgeSpacing = 18;
 
-      const horizontalCentre =
-        joystickSide === "left"
-          ? joystickRadius + edgeSpacing
-          : viewportWidth - joystickRadius - edgeSpacing;
+      const horizontalCentre = viewportWidth * 0.5;
 
       joystick.style.left = `${horizontalCentre}px`;
       joystick.style.bottom = `${bottom}px`;
