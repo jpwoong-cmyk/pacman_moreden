@@ -187,7 +187,7 @@
       const bottom =
         distanceBelowButton +
         buttonRect.height +
-        13;
+        20;
 
       const joystickRadius = joystick.offsetWidth / 2;
       const edgeSpacing = 18;
