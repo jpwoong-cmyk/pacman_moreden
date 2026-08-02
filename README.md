@@ -1,23 +1,76 @@
-# P.A.C v7.2.2 Lobby Creep Alignment Fix
+# P.A.C v9 Living City
 
-Replace these two files in GitHub:
+## Add
 
-- `css/mobile.css`
-- `js/lobby-creeps.js`
+- `js/living-city.js`
 
-No `index.html` change is needed.
+## Edit
 
-## Why it was out of place
+Follow `INDEX-CHANGES.txt`.
 
-The base stylesheet still set the mobile creep canvas to 108px high, while the
-mobile card had already been reduced. The JavaScript also clamped its drawing
-height to at least 92px.
+## Included changes
 
-The replacement:
+### City mix
 
-- gives the creep track an explicit responsive width and height;
-- makes the canvas exactly fill that track;
-- observes the real rendered stage size;
-- calculates creep size from both available width and height;
-- keeps the whole creep group vertically centred;
-- preserves the left-to-right patrol movement.
+The update keeps the existing procedural city style and replaces selected
+existing obstacle lots rather than adding a second layer of obstacles.
+
+The generated city now aims for:
+
+- housing blocks;
+- offices;
+- schools;
+- parks;
+- up to a controlled number of malls;
+- the existing shops, stalls, cones and generic buildings.
+
+Three selected lots are converted into walkable parks. This adds open space
+rather than making the map narrower.
+
+### Day and night
+
+- 120 seconds of day;
+- gradual dusk transition;
+- 120 seconds of night;
+- gradual dawn transition;
+- lamps and windows illuminate as night approaches;
+- daylight returns smoothly.
+
+The cycle follows the shared match elapsed time, so players in the same room
+see the same part of the day/night cycle.
+
+### Citizens
+
+Citizens are generated deterministically from the shared map seed.
+
+Their routine is:
+
+1. remain inside housing at the beginning of the day;
+2. leave home;
+3. walk along valid map paths;
+4. enter an office, school, mall/shop, or remain visible inside a park;
+5. leave before night;
+6. walk back home;
+7. remain indoors during the night.
+
+Citizens are deliberately limited to roughly 14-22 so they do not clutter the
+map. Their appearance is smaller than the pellet orbit and uses the current
+non-pixel, miniature-city visual direction.
+
+## Not changed
+
+- pellets;
+- creep spawning;
+- creep AI;
+- scores;
+- respawning;
+- multiplayer rooms;
+- mobile joystick;
+- Supabase schema.
+
+## GitHub status
+
+An automatic branch creation was attempted but GitHub returned:
+`403 Resource not accessible by integration`.
+
+The repository was not modified automatically.
