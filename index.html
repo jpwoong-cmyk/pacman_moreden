@@ -168,6 +168,11 @@
     </header>
 
     <section class="board-wrap" aria-label="P.A.C shared scrolling city board">
+      <p id="latencyValue"
+        class="network-latency"
+        data-quality="idle"
+        aria-live="off"
+        title="Realtime connection latency unavailable">-- ms</p>
       <canvas id="gameCanvas" width="1600" height="900" tabindex="0" aria-label="P.A.C game canvas. On mobile, swipe to move."></canvas>
       <div class="swipe-hint" aria-hidden="true"><span>↕</span> Swipe to move <span>↔</span></div>
 
@@ -210,6 +215,7 @@
   <script src="multiplayer/world-sync.js"></script>
   <script src="multiplayer/leaderboard-service.js"></script>
   <script src="multiplayer/multiplayer.js"></script>
+  <script src="multiplayer/network-latency.js"></script>
 
   <script src="js/audio-manager.js"></script>
   <script src="js/map.js"></script>

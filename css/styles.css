@@ -1272,3 +1272,48 @@ body.lobby-open {
     transform: translateX(0);
   }
 }
+
+/* Standalone Realtime latency readout */
+.network-latency {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 4;
+  margin: 0;
+  color: #f2f6f7;
+  font-size: clamp(0.72rem, 1.2vw, 0.86rem);
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.95),
+    0 0 7px rgba(0, 0, 0, 0.82);
+  pointer-events: none;
+  user-select: none;
+}
+
+.network-latency[data-quality="good"] {
+  color: #a9f7c1;
+}
+
+.network-latency[data-quality="fair"],
+.network-latency[data-quality="measuring"] {
+  color: #ffe27a;
+}
+
+.network-latency[data-quality="poor"] {
+  color: #ff8f8f;
+}
+
+.network-latency[data-quality="idle"] {
+  color: #a9b4b9;
+}
+
+@media (max-width: 760px) {
+  .network-latency {
+    top: 11px;
+    right: 12px;
+    font-size: 0.72rem;
+  }
+}
