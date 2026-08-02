@@ -190,7 +190,7 @@
 }
 
 .mobile-joystick__arrow--right {
-  right: 7px;
+  right: 50%;
   top: 50%;
   transform: translateY(-50%) rotate(90deg);
 }
