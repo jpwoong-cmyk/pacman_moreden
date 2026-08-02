@@ -1,0 +1,176 @@
+/* P.A.C v9.2 seasonal world and danger atmosphere */
+
+.season-status {
+  position: absolute;
+  top: 48px;
+  left: 12px;
+  z-index: 8;
+  margin: 0;
+  color: #eef3f4;
+  font-size: clamp(0.66rem, 1.15vw, 0.78rem);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.96),
+    0 0 8px rgba(0, 0, 0, 0.84);
+  pointer-events: none;
+  user-select: none;
+}
+
+.season-status[data-season="spring"] {
+  color: #cbeed0;
+}
+
+.season-status[data-season="summer"] {
+  color: #ffe38d;
+}
+
+.season-status[data-season="autumn"] {
+  color: #e2ad70;
+}
+
+.season-status[data-season="winter"] {
+  color: #cceef6;
+}
+
+.season-announcement {
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  z-index: 9;
+  max-width: calc(100% - 40px);
+  margin: 0;
+  color: #f3f6f7;
+  font-size: clamp(0.78rem, 1.8vw, 1rem);
+  font-weight: 950;
+  letter-spacing: 0.2em;
+  line-height: 1;
+  text-align: center;
+  text-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.95),
+    0 0 18px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  transform: translate(-50%, -10px);
+  transition:
+    opacity 320ms ease,
+    transform 420ms ease;
+  pointer-events: none;
+  user-select: none;
+}
+
+.season-announcement.is-visible {
+  opacity: 0.92;
+  transform: translate(-50%, 0);
+}
+
+.season-announcement[data-season="spring"] {
+  color: #ccefd2;
+}
+
+.season-announcement[data-season="summer"] {
+  color: #ffe49a;
+}
+
+.season-announcement[data-season="autumn"] {
+  color: #e2ad72;
+}
+
+.season-announcement[data-season="winter"] {
+  color: #d5f2f8;
+}
+
+.danger-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  opacity: 0;
+  background:
+    radial-gradient(
+      circle at center,
+      rgba(128, 0, 0, 0) 52%,
+      rgba(128, 0, 0, 0.08) 73%,
+      rgba(166, 0, 0, 0.32) 100%
+    );
+  box-shadow:
+    inset 0 0 42px rgba(165, 0, 0, 0.12),
+    inset 0 0 95px rgba(120, 0, 0, 0.08);
+  transition: opacity 360ms ease;
+  pointer-events: none;
+}
+
+.danger-vignette[data-level="1"] {
+  opacity: 0.3;
+}
+
+.danger-vignette[data-level="2"] {
+  opacity: 0.44;
+}
+
+.danger-vignette[data-level="3"] {
+  opacity: 0.58;
+  animation: pac-danger-breathe 1.6s ease-in-out infinite alternate;
+}
+
+@keyframes pac-danger-breathe {
+  from {
+    opacity: 0.42;
+  }
+
+  to {
+    opacity: 0.62;
+  }
+}
+
+.board-wrap[data-season="winter"] {
+  border-color: rgba(182, 215, 225, 0.52);
+}
+
+.board-wrap[data-season="summer"] {
+  border-color: rgba(225, 188, 82, 0.44);
+}
+
+.board-wrap[data-season="autumn"] {
+  border-color: rgba(166, 104, 59, 0.45);
+}
+
+.board-wrap[data-season="spring"] {
+  border-color: rgba(125, 179, 142, 0.42);
+}
+
+@media (max-width: 760px) {
+  .season-status {
+    top: 46px;
+    left: 10px;
+    font-size: 0.64rem;
+  }
+
+  .season-announcement {
+    top: 13%;
+    font-size: 0.72rem;
+    letter-spacing: 0.15em;
+  }
+
+  .danger-vignette {
+    background:
+      radial-gradient(
+        circle at center,
+        rgba(128, 0, 0, 0) 45%,
+        rgba(128, 0, 0, 0.08) 70%,
+        rgba(166, 0, 0, 0.3) 100%
+      );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .season-announcement,
+  .danger-vignette {
+    transition: none;
+  }
+
+  .danger-vignette[data-level="3"] {
+    animation: none;
+  }
+}
