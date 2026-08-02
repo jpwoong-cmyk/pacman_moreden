@@ -1187,6 +1187,7 @@
     state.remotePlayers?.players.clear();
     window.PacmanPowerUpsUI?.hideRoundOver();
     hideOverlay();
+    window.PacmanAudio?.playGame();
     window.PacmanWorldSync?.stop();
 
     document.dispatchEvent(
@@ -1287,7 +1288,7 @@
   });
 
   document.addEventListener("pacman:room-left", () => {
-    window.PacmanAudio?.setDangerActive(false);
+    window.PacmanAudio?.playGameOver();
     window.PacmanAudio?.playLobby();
     state.running = false;
     state.worldReady = false;

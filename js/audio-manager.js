@@ -13,6 +13,10 @@
     danger: {
       src: "audio/danger-layer.mp3",
       volume: 0.64
+    },
+    gameOver: {
+      src: "audio/game-over.mp3",
+      volume: 0.78
     }
   });
 
@@ -20,16 +24,22 @@
     lobby: new Audio(TRACKS.lobby.src),
     game: new Audio(TRACKS.game.src),
     danger: new Audio(TRACKS.danger.src)
+    gameOver: new Audio(TRACKS.gameOver.src)
   };
 
   Object.values(audio).forEach((track) => {
-    track.loop = true;
     track.preload = "auto";
   });
+
+  audio.lobby.loop = true;
+  audio.game.loop = true;
+  audio.danger.loop = true;
+  audio.gameOver.loop = false;
 
   audio.lobby.volume = TRACKS.lobby.volume;
   audio.game.volume = TRACKS.game.volume;
   audio.danger.volume = 0;
+  audio.gameOver.volume = TRACKS.gameOver.volume;
 
   const state = {
     unlocked: false,
@@ -90,6 +100,7 @@
 
     if (state.desiredMode === "lobby") {
       state.dangerActive = false;
+      stopTrack(audio.gameOver);
       stopTrack(audio.game);
       stopTrack(audio.danger);
       audio.danger.volume = 0;
@@ -99,6 +110,7 @@
     }
 
     if (state.desiredMode === "game") {
+      stopTrack(audio.gameOver);
       stopTrack(audio.lobby);
       audio.game.volume = TRACKS.game.volume;
       await safePlay(audio.game);
@@ -110,6 +122,21 @@
         stopTrack(audio.danger);
         audio.danger.volume = 0;
       }
+      return;
+    }
+
+    if (state.desiredMode === "game-over") {
+      state.dangerActive = false;
+
+      stopTrack(audio.lobby);
+      stopTrack(audio.game);
+      stopTrack(audio.danger);
+
+      audio.danger.volume = 0;
+      audio.gameOver.volume = TRACKS.gameOver.volume;
+
+      stopTrack(audio.gameOver);
+      await safePlay(audio.gameOver);
       return;
     }
 
@@ -133,6 +160,12 @@
 
   function playGame() {
     state.desiredMode = "game";
+    state.dangerActive = false;
+    void applyDesiredMode();
+  }
+
+  function playGameOver() {
+    state.desiredMode = "game-over";
     state.dangerActive = false;
     void applyDesiredMode();
   }
@@ -187,6 +220,7 @@
     unlock,
     playLobby,
     playGame,
+    playGameOver,
     setDangerActive,
     stopAll,
     setMuted,
