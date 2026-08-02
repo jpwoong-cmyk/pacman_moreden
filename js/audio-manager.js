@@ -143,6 +143,7 @@
     stopTrack(audio.lobby);
     stopTrack(audio.game);
     stopTrack(audio.danger);
+    stopTrack(audio.gameOver);
     audio.danger.volume = 0;
   }
 

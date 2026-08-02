@@ -241,10 +241,12 @@
 
   function showRoundOver() {
     if (state.localCaught) return;
+
     state.localCaught = true;
     hideOverlay();
+
     window.PacmanPowerUpsUI?.showRoundOver(localScore());
-    window.PacmanAudio?.setDangerActive(false);
+    window.PacmanAudio?.playGameOver();
 
     if (window.PacmanLeaderboard) {
       void window.PacmanLeaderboard.submitScore(localScore())
@@ -280,6 +282,7 @@
     state.pacman.nextDir = { x: 0, y: 0 };
     window.PacmanPowerUpsUI?.hideRoundOver();
     hideOverlay();
+    window.PacmanAudio?.playGame();
     canvas.focus({ preventScroll: true });
   }
 
