@@ -60,18 +60,33 @@
 
         const padding = Math.max(
           10,
-          Math.min(viewport.width, viewport.height) * 0.035
+          Math.min(viewport.width, viewport.height) * 0.025
+        );
+        const portrait = viewport.height > viewport.width * 1.12;
+
+        // In portrait layouts, reserve the lower part of the board for the
+        // result panel. The complete live city is fitted into the open area
+        // above it, rather than being centred underneath the dialog.
+        const panelReserve = portrait
+          ? Math.min(viewport.height * 0.44, 520)
+          : Math.min(viewport.height * 0.16, 120);
+        const mapTop = padding;
+        const mapBottom = Math.max(
+          mapTop + 1,
+          viewport.height - panelReserve - padding
         );
         const usableWidth = Math.max(1, viewport.width - padding * 2);
-        const usableHeight = Math.max(1, viewport.height - padding * 2);
+        const usableHeight = Math.max(1, mapBottom - mapTop);
         const overviewTileSize = Math.max(
           4,
           Math.min(usableWidth / this.cols, usableHeight / this.rows)
         );
+        const mapWidth = this.cols * overviewTileSize;
+        const mapHeight = this.rows * overviewTileSize;
 
         viewport.tileSize = overviewTileSize;
-        viewport.offsetX = (viewport.width - this.cols * overviewTileSize) * 0.5;
-        viewport.offsetY = (viewport.height - this.rows * overviewTileSize) * 0.5;
+        viewport.offsetX = (viewport.width - mapWidth) * 0.5;
+        viewport.offsetY = mapTop + (usableHeight - mapHeight) * 0.5;
       }
 
       return originalDraw.call(this, ctx, viewport, depthMode);

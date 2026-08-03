@@ -77,11 +77,11 @@
   inset: 0;
   z-index: 30;
   display: grid;
-  place-items: center;
+  place-items: end center;
   padding: 18px;
-  background: rgba(2, 4, 7, 0.28);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: rgba(2, 4, 7, 0.14);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .round-result.hidden {
@@ -94,7 +94,7 @@
   border: 1px solid rgba(224, 230, 237, 0.52);
   border-radius: 8px;
   background:
-    linear-gradient(145deg, rgba(39, 44, 51, 0.82), rgba(7, 10, 14, 0.88));
+    linear-gradient(145deg, rgba(39, 44, 51, 0.91), rgba(7, 10, 14, 0.94));
   box-shadow:
     0 22px 55px rgba(0, 0, 0, 0.56),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
@@ -309,13 +309,19 @@
   }
 
   .round-result {
-    padding: 14px;
+    place-items: end center;
+    padding: 10px;
+    background: rgba(2, 4, 7, 0.1);
   }
 
   .round-result__panel {
-    padding: 20px 14px 16px;
+    padding: 16px 14px 14px;
     background:
-      linear-gradient(145deg, rgba(39, 44, 51, 0.78), rgba(7, 10, 14, 0.86));
+      linear-gradient(145deg, rgba(39, 44, 51, 0.92), rgba(7, 10, 14, 0.95));
+  }
+
+  .score-stage {
+    min-height: 126px;
   }
 }
 
