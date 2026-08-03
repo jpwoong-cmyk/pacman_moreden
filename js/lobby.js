@@ -1,6 +1,10 @@
 (function () {
   "use strict";
 
+  const LOBBY_IDLE_TIMEOUT_MS = 10 * 60 * 1000;
+  const IDLE_CLEANUP_GRACE_MS = 2500;
+  const IDLE_PAGE_MARKER = "pac-idle-timeout-page-loaded";
+
   const lobbyScreen = document.getElementById("lobbyScreen");
   const gameShell = document.getElementById("gameShell");
   const connectionStatus = document.getElementById("connectionStatus");
@@ -37,6 +41,9 @@
 
   let currentProfile = null;
   let currentRoom = null;
+  let lobbyIdleTimer = null;
+  let lastLobbyActivityAt = Date.now();
+  let idleTimedOut = false;
 
   function setMessage(element, message, type = "") {
     element.textContent = message || "";
@@ -66,6 +73,115 @@
     leaveWaitingRoomButton.textContent = "Leave Room";
   }
 
+  function isLobbyVisible() {
+    return (
+      !lobbyScreen.classList.contains("hidden") &&
+      lobbyScreen.getAttribute("aria-hidden") !== "true"
+    );
+  }
+
+  function clearLobbyIdleTimer() {
+    if (!lobbyIdleTimer) return;
+    window.clearTimeout(lobbyIdleTimer);
+    lobbyIdleTimer = null;
+  }
+
+  function scheduleLobbyIdleTimer(resetActivity = false) {
+    if (idleTimedOut || !isLobbyVisible()) {
+      clearLobbyIdleTimer();
+      return;
+    }
+
+    if (resetActivity) {
+      lastLobbyActivityAt = Date.now();
+    }
+
+    clearLobbyIdleTimer();
+
+    const elapsed = Date.now() - lastLobbyActivityAt;
+    const remaining = Math.max(0, LOBBY_IDLE_TIMEOUT_MS - elapsed);
+
+    lobbyIdleTimer = window.setTimeout(
+      () => void handleLobbyIdleTimeout(),
+      remaining
+    );
+  }
+
+  function recordLobbyActivity() {
+    if (idleTimedOut || !isLobbyVisible()) return;
+    scheduleLobbyIdleTimer(true);
+  }
+
+  async function disconnectIdleLobby() {
+    /*
+     * Best-effort cleanup. Each operation is isolated so one failed network
+     * request cannot prevent the remaining local connections from closing.
+     */
+    try {
+      await window.PacmanNetworkLatency?.stop?.();
+    } catch (_error) {
+      // Continue closing the remaining connections.
+    }
+
+    try {
+      window.PacmanWorldSync?.stop?.();
+    } catch (_error) {
+      // Continue closing the remaining connections.
+    }
+
+    try {
+      await window.PacmanMultiplayer?.leaveCurrentRoom?.();
+    } catch (_error) {
+      /*
+       * The room may already have ended or the device may be offline.
+       * removeAllChannels below still closes local Realtime channels.
+       */
+    }
+
+    try {
+      await window.pacmanSupabase?.removeAllChannels?.();
+    } catch (_error) {
+      // The room unsubscribe may already have removed every channel.
+    }
+
+    try {
+      window.pacmanSupabase?.auth?.stopAutoRefresh?.();
+    } catch (_error) {
+      // A missing session has no refresh timer to stop.
+    }
+  }
+
+  async function handleLobbyIdleTimeout() {
+    if (idleTimedOut || !isLobbyVisible()) return;
+
+    idleTimedOut = true;
+    clearLobbyIdleTimer();
+    resetRoomActionButtons();
+
+    connectionStatus.textContent = "Idle timeout. Closing connection…";
+    connectionStatus.dataset.state = "loading";
+
+    const cleanup = disconnectIdleLobby();
+    const cleanupLimit = new Promise((resolve) => {
+      window.setTimeout(resolve, IDLE_CLEANUP_GRACE_MS);
+    });
+
+    await Promise.race([cleanup, cleanupLimit]);
+
+    /*
+     * idle.html sets this marker on its first load. Removing any older marker
+     * ensures the first timeout page remains visible; refreshing it then
+     * returns the player to the main P.A.C page.
+     */
+    try {
+      window.sessionStorage.removeItem(IDLE_PAGE_MARKER);
+    } catch (_error) {
+      // Private browsing restrictions should not block the timeout page.
+    }
+
+    window.location.replace("idle.html");
+  }
+
   function showAuthPanel(panel = "choice") {
     authChoice.hidden = panel !== "choice";
     createAccountForm.hidden = panel !== "create";
@@ -93,6 +209,7 @@
     gameShell.setAttribute("aria-hidden", "true");
     document.body.classList.add("lobby-open");
     window.PacmanAudio?.playLobby();
+    scheduleLobbyIdleTimer(true);
   }
 
   function launchGame(room, players = [], currentUserId = null) {
@@ -104,6 +221,7 @@
      * the first successful match start.
      */
     resetRoomActionButtons();
+    clearLobbyIdleTimer();
 
     lobbyScreen.classList.add("hidden");
     lobbyScreen.setAttribute("aria-hidden", "true");
@@ -409,6 +527,41 @@
       connectionStatus.textContent = error.message;
       connectionStatus.dataset.state = "error";
     }
+  });
+
+  window.addEventListener(
+    "pointerdown",
+    recordLobbyActivity,
+    { capture: true, passive: true }
+  );
+
+  window.addEventListener(
+    "touchstart",
+    recordLobbyActivity,
+    { capture: true, passive: true }
+  );
+
+  window.addEventListener(
+    "wheel",
+    recordLobbyActivity,
+    { capture: true, passive: true }
+  );
+
+  window.addEventListener(
+    "keydown",
+    recordLobbyActivity,
+    { capture: true }
+  );
+
+  document.addEventListener("visibilitychange", () => {
+    if (idleTimedOut || !isLobbyVisible()) return;
+
+    if (Date.now() - lastLobbyActivityAt >= LOBBY_IDLE_TIMEOUT_MS) {
+      void handleLobbyIdleTimeout();
+      return;
+    }
+
+    scheduleLobbyIdleTimer(false);
   });
 
   document.body.classList.add("lobby-open");
