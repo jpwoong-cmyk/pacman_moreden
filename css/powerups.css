@@ -421,7 +421,6 @@
   .score-stage {
     min-height: 126px;
   }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .score-cube {
