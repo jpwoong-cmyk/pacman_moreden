@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  const ROUND_RESTART_COOLDOWN_MS = 5000;
+
   const TYPES = Object.freeze({
     shield: {
       color: "#d72f3f",
@@ -18,6 +20,70 @@
       label: "Hunter"
     }
   });
+
+  const roundOverview = {
+    active: false,
+    viewport: null,
+    normalTileSize: null
+  };
+
+  let restartCooldownTimer = null;
+
+  function enableRoundOverview() {
+    roundOverview.active = true;
+  }
+
+  function disableRoundOverview() {
+    roundOverview.active = false;
+
+    if (roundOverview.viewport && Number.isFinite(roundOverview.normalTileSize)) {
+      roundOverview.viewport.tileSize = roundOverview.normalTileSize;
+    }
+
+    roundOverview.viewport = null;
+    roundOverview.normalTileSize = null;
+  }
+
+  function installMapOverviewHook() {
+    const prototype = window.MazeMap?.prototype;
+    if (!prototype || prototype.__pacRoundOverviewInstalled) return;
+
+    const originalDraw = prototype.draw;
+    if (typeof originalDraw !== "function") return;
+
+    prototype.draw = function drawWithRoundOverview(ctx, viewport, depthMode) {
+      if (roundOverview.active && viewport) {
+        if (roundOverview.viewport !== viewport) {
+          roundOverview.viewport = viewport;
+          roundOverview.normalTileSize = viewport.tileSize;
+        }
+
+        const padding = Math.max(
+          10,
+          Math.min(viewport.width, viewport.height) * 0.035
+        );
+        const usableWidth = Math.max(1, viewport.width - padding * 2);
+        const usableHeight = Math.max(1, viewport.height - padding * 2);
+        const overviewTileSize = Math.max(
+          4,
+          Math.min(usableWidth / this.cols, usableHeight / this.rows)
+        );
+
+        viewport.tileSize = overviewTileSize;
+        viewport.offsetX = (viewport.width - this.cols * overviewTileSize) * 0.5;
+        viewport.offsetY = (viewport.height - this.rows * overviewTileSize) * 0.5;
+      }
+
+      return originalDraw.call(this, ctx, viewport, depthMode);
+    };
+
+    Object.defineProperty(prototype, "__pacRoundOverviewInstalled", {
+      value: true,
+      configurable: false,
+      enumerable: false,
+      writable: false
+    });
+  }
 
   function createId() {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -280,6 +346,51 @@
     }
   }
 
+  function stopRestartCooldown(button, resetButton = true) {
+    if (restartCooldownTimer) {
+      window.clearInterval(restartCooldownTimer);
+      restartCooldownTimer = null;
+    }
+
+    if (!button || !resetButton) return;
+    button.disabled = false;
+    button.textContent = "Continue";
+    button.classList.remove("is-cooling", "is-ready");
+    button.removeAttribute("aria-disabled");
+  }
+
+  function startRestartCooldown(button, cooldownMs = ROUND_RESTART_COOLDOWN_MS) {
+    stopRestartCooldown(button, false);
+
+    const duration = Math.max(0, Number(cooldownMs) || 0);
+    const availableAt = Date.now() + duration;
+
+    button.disabled = true;
+    button.classList.add("is-cooling");
+    button.classList.remove("is-ready");
+    button.setAttribute("aria-disabled", "true");
+
+    const updateButton = () => {
+      const remainingMs = Math.max(0, availableAt - Date.now());
+
+      if (remainingMs <= 0) {
+        stopRestartCooldown(button, false);
+        button.disabled = false;
+        button.textContent = "Continue";
+        button.classList.remove("is-cooling");
+        button.classList.add("is-ready");
+        button.removeAttribute("aria-disabled");
+        button.focus({ preventScroll: true });
+        return;
+      }
+
+      button.textContent = `Continue (${Math.ceil(remainingMs / 1000)})`;
+    };
+
+    updateButton();
+    restartCooldownTimer = window.setInterval(updateButton, 150);
+  }
+
   function ensureUI() {
     const gameShell = document.getElementById("gameShell");
     const boardWrap = document.querySelector("#gameShell .board-wrap");
@@ -317,8 +428,7 @@
       result.setAttribute("aria-modal", "true");
       result.setAttribute("aria-labelledby", "roundResultTitle");
       result.innerHTML = `
-        <div class="round-result__panel">
-          <p class="round-result__eyebrow">ROUND COMPLETE</p>
+        <div class="round-result__panel" tabindex="-1">
           <h2 id="roundResultTitle">Game Over</h2>
           <div class="score-stage" aria-label="Round score">
             <div class="score-cube" id="roundScoreCube">
@@ -334,16 +444,25 @@
               <div class="score-cube__side score-cube__bottom"></div>
             </div>
           </div>
-          <p class="round-result__note">The shared city is still running.</p>
+          <p class="round-result__note">Continue 😁 or Exit? 🙁</p>
           <div class="round-result__actions">
-            <button id="restartRoundButton" type="button">OK</button>
+            <button id="restartRoundButton" type="button">Continue</button>
             <button id="exitRoundButton" type="button">Exit</button>
           </div>
         </div>
       `;
       boardWrap.appendChild(result);
 
-      result.querySelector("#restartRoundButton").addEventListener("click", () => {
+      result.querySelector("#restartRoundButton").addEventListener("click", (event) => {
+        const button = event.currentTarget;
+        if (button.disabled) return;
+
+        button.disabled = true;
+        button.textContent = "Continuing…";
+        button.classList.remove("is-ready");
+        button.classList.add("is-cooling");
+        button.setAttribute("aria-disabled", "true");
+
         document.dispatchEvent(new CustomEvent("pacman:restart-round-requested"));
       });
       result.querySelector("#exitRoundButton").addEventListener("click", () => {
@@ -354,12 +473,15 @@
     return {
       hud,
       result,
+      panel: result.querySelector(".round-result__panel"),
+      restart: result.querySelector("#restartRoundButton"),
       shield: document.getElementById("shieldPowerValue"),
       rush: document.getElementById("rushPowerValue"),
       hunter: document.getElementById("hunterPowerValue")
     };
   }
 
+  installMapOverviewHook();
   const ui = ensureUI();
 
   window.PacmanPowerUpsUI = Object.freeze({
@@ -374,11 +496,17 @@
       ui.result.querySelectorAll(".round-score-value").forEach((node) => {
         node.textContent = Number(score || 0).toLocaleString();
       });
+
+      enableRoundOverview();
       ui.result.classList.remove("hidden");
-      ui.result.querySelector("#restartRoundButton")?.focus();
+      startRestartCooldown(ui.restart);
+      ui.panel?.focus({ preventScroll: true });
     },
     hideRoundOver() {
-      ui?.result.classList.add("hidden");
+      if (!ui) return;
+      stopRestartCooldown(ui.restart);
+      disableRoundOverview();
+      ui.result.classList.add("hidden");
     }
   });
 
