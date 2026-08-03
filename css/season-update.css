@@ -2,8 +2,8 @@
 
 .season-status {
   position: absolute;
-  top: 48px;
-  left: 12px;
+  top: 174px;
+  left: 14px;
   z-index: 8;
   margin: 0;
   color: #eef3f4;
@@ -142,7 +142,7 @@
 
 @media (max-width: 760px) {
   .season-status {
-    top: 46px;
+    top: 122px;
     left: 10px;
     font-size: 0.64rem;
   }
@@ -161,6 +161,14 @@
         rgba(128, 0, 0, 0.08) 70%,
         rgba(166, 0, 0, 0.3) 100%
       );
+  }
+}
+
+@media (max-width: 380px) {
+  .season-status {
+    top: 110px;
+    left: 6px;
+    font-size: 0.58rem;
   }
 }
 
