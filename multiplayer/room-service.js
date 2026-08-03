@@ -17,6 +17,12 @@
       .slice(0, 6);
   }
 
+  function normaliseGameMode(value) {
+    return String(value || "").toLowerCase() === "coop"
+      ? "coop"
+      : "versus";
+  }
+
   function generateRoomCode() {
     const values = new Uint32Array(6);
     window.crypto.getRandomValues(values);
@@ -96,14 +102,51 @@
     return firstRow(data);
   }
 
+  async function setRoomGameMode(roomId, mode) {
+    const { data, error } = await client().rpc("set_game_room_mode", {
+      p_room_id: roomId,
+      p_game_mode: normaliseGameMode(mode)
+    });
+
+    if (error) throw new Error(error.message);
+    return firstRow(data);
+  }
+
   async function getRoom(roomId) {
-    const { data, error } = await client()
+    let { data, error } = await client()
       .from("game_rooms")
       .select(
-        "id, code, host_user_id, status, map_seed, max_players, created_at, started_at, ended_at"
+        "id, code, host_user_id, status, game_mode, map_seed, max_players, created_at, started_at, ended_at"
       )
       .eq("id", roomId)
       .single();
+
+    const missingModeColumn = Boolean(
+      error &&
+      (error.code === "42703" ||
+        error.code === "PGRST204" ||
+        /game_mode|column/i.test(String(error.message || "")))
+    );
+
+    /*
+     * Keep existing Versus rooms usable while the optional v10 SQL migration
+     * is still waiting to be installed. Coop selection will explain the
+     * missing upgrade when the host tries to enable it.
+     */
+    if (missingModeColumn) {
+      const fallback = await client()
+        .from("game_rooms")
+        .select(
+          "id, code, host_user_id, status, map_seed, max_players, created_at, started_at, ended_at"
+        )
+        .eq("id", roomId)
+        .single();
+
+      data = fallback.data
+        ? { ...fallback.data, game_mode: "versus" }
+        : null;
+      error = fallback.error;
+    }
 
     if (error) throw new Error(`Unable to load room: ${error.message}`);
     return data;
@@ -149,11 +192,13 @@
 
   window.PacmanRoomService = Object.freeze({
     sanitiseRoomCode,
+    normaliseGameMode,
     createRoom,
     joinRoom,
     leaveRoom,
     heartbeatRoom,
     startRoom,
+    setRoomGameMode,
     getRoom,
     getPlayers
   });

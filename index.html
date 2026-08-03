@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="css/powerups.css">
   <link rel="stylesheet" href="css/season-update.css">
   <link rel="stylesheet" href="css/lobby-puppy.css">
+  <link rel="stylesheet" href="css/coop-mode.css">
 </head>
 <body>
   <section id="lobbyScreen" class="lobby-screen" aria-labelledby="lobbyTitle">
@@ -34,10 +35,19 @@
     </div>
 
     <div class="lobby-card account-lobby-card">
-      <div class="lobby-eyebrow lobby-score-marquee" aria-label="Pacman high scores">
-        <div id="lobbyScoreTrack" class="lobby-score-track">
-          <span class="lobby-score-group">HIGH SCORES · LOADING CITY RECORDS…</span>
-          <span class="lobby-score-group" aria-hidden="true">HIGH SCORES · LOADING CITY RECORDS…</span>
+      <div class="lobby-score-stack" aria-label="P.A.C leaderboards">
+        <div class="lobby-eyebrow lobby-score-marquee lobby-score-marquee--individual" aria-label="Individual Pacman high scores">
+          <div id="lobbyScoreTrack" class="lobby-score-track">
+            <span class="lobby-score-group">IND HIGH SCORE · LOADING CITY RECORDS…</span>
+            <span class="lobby-score-group" aria-hidden="true">IND HIGH SCORE · LOADING CITY RECORDS…</span>
+          </div>
+        </div>
+
+        <div class="lobby-eyebrow lobby-score-marquee lobby-score-marquee--coop" aria-label="Cooperative Pacman high scores">
+          <div id="coopScoreTrack" class="lobby-score-track">
+            <span class="lobby-score-group">COOP HIGH SCORE · LOADING TEAM RECORDS…</span>
+            <span class="lobby-score-group" aria-hidden="true">COOP HIGH SCORE · LOADING TEAM RECORDS…</span>
+          </div>
         </div>
       </div>
 
@@ -145,7 +155,15 @@
           </div>
 
           <div class="waiting-room-meta">
-            <span id="roomStatusBadge" class="room-status-badge">WAITING</span>
+            <div class="waiting-room-status-line">
+              <span id="roomStatusBadge" class="room-status-badge">WAITING</span>
+
+              <div id="gameModeSwitch" class="game-mode-switch" data-mode="versus" data-editable="false" role="group" aria-label="Game mode: Versus">
+                <button class="game-mode-switch__button is-active" type="button" data-game-mode="versus" aria-pressed="true">Versus</button>
+                <button class="game-mode-switch__button" type="button" data-game-mode="coop" aria-pressed="false">Coop</button>
+              </div>
+            </div>
+
             <span id="roomPlayerCount">0 / 4 players</span>
           </div>
 
@@ -167,7 +185,7 @@
     <header class="game-header">
       <div class="title-block">
         <p class="eyebrow">CITY OF P.A.C</p>
-        <h1>P.A.C <span>v9.2</span></h1>
+        <h1>P.A.C <span>v10.0</span></h1>
         <p class="camera-note"><span aria-hidden="true">◉</span> Let's Play!</p>
       </div>
 
@@ -187,6 +205,16 @@
         data-quality="idle"
         aria-live="off"
         title="Realtime connection latency unavailable">-- ms</p>
+
+      <div id="coopTeamHud" class="coop-team-hud" hidden aria-hidden="true" aria-label="Cooperative team score">
+        <div class="coop-team-hud__identity">
+          <span class="coop-team-hud__label">COOP TEAM</span>
+          <span id="coopTeamNames" class="coop-team-hud__names">TEAM P.A.C</span>
+        </div>
+        <strong id="coopTeamScore" class="coop-team-hud__score">0</strong>
+        <span id="coopTeamAlive" class="coop-team-hud__alive">0 / 0 ACTIVE</span>
+      </div>
+
       <canvas id="gameCanvas" width="1600" height="900" tabindex="0" aria-label="P.A.C game canvas. On mobile, swipe to move."></canvas>
       <div class="swipe-hint" aria-hidden="true"><span>↕</span> Swipe to move <span>↔</span></div>
 
@@ -244,6 +272,7 @@
   <script src="js/lobby-creeps.js"></script>
   <script src="js/main.js"></script>
   <script src="js/lobby.js"></script>
+  <script src="js/coop-mode.js"></script>
   <script src="js/mobile-viewport.js"></script>
   <script src="js/mobile-joystick.js"></script>
 </body>

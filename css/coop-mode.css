@@ -1,0 +1,267 @@
+/* P.A.C cooperative room mode, shared team HUD, and dual leaderboards. */
+
+/* --------------------------------------------------------------------------
+   Lobby leaderboards
+   -------------------------------------------------------------------------- */
+.lobby-score-stack {
+  display: grid;
+  gap: 5px;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.lobby-score-stack .lobby-score-marquee {
+  margin: 0;
+}
+
+.lobby-score-marquee--coop {
+  border-color: rgba(118, 209, 255, 0.22);
+  background:
+    linear-gradient(90deg, rgba(33, 91, 122, 0.12), rgba(7, 12, 15, 0.3), rgba(33, 91, 122, 0.12));
+  color: #bdeaff;
+}
+
+.lobby-score-marquee--coop .lobby-score-group {
+  color: #bdeaff;
+}
+
+/* --------------------------------------------------------------------------
+   Waiting-room mode selector
+   -------------------------------------------------------------------------- */
+.waiting-room-status-line {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.game-mode-switch {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(72px, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid #3f4b51;
+  border-radius: 6px;
+  background: rgba(5, 8, 10, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.game-mode-switch__button {
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: #7f8d93;
+  font-size: 0.63rem;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  box-shadow: none;
+}
+
+.game-mode-switch__button:hover:not(:disabled) {
+  border-color: #58676e;
+  background: rgba(255, 255, 255, 0.05);
+  color: #e5ecef;
+}
+
+.game-mode-switch__button.is-active[data-game-mode="versus"] {
+  border-color: #826a1f;
+  background: linear-gradient(180deg, #493b12, #211b0a);
+  color: #ffe477;
+  box-shadow: inset 0 1px 0 rgba(255, 238, 154, 0.16);
+}
+
+.game-mode-switch__button.is-active[data-game-mode="coop"] {
+  border-color: #26779c;
+  background: linear-gradient(180deg, #174a63, #0c2633);
+  color: #bfeaff;
+  box-shadow: inset 0 1px 0 rgba(193, 238, 255, 0.14);
+}
+
+.game-mode-switch__button:disabled {
+  cursor: default;
+  filter: none;
+  opacity: 0.78;
+}
+
+.game-mode-switch[data-editable="false"] {
+  opacity: 0.84;
+}
+
+/* --------------------------------------------------------------------------
+   Cooperative in-game score card
+   -------------------------------------------------------------------------- */
+.coop-team-hud {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  z-index: 7;
+  display: grid;
+  grid-template-columns: auto minmax(84px, auto) auto;
+  align-items: center;
+  gap: 11px;
+  min-width: min(430px, calc(100% - 390px));
+  padding: 8px 12px;
+  border: 1px solid rgba(126, 211, 255, 0.35);
+  border-radius: 7px;
+  background:
+    linear-gradient(145deg, rgba(15, 40, 53, 0.78), rgba(4, 11, 15, 0.64));
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateX(-50%);
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.coop-team-hud[hidden] {
+  display: none;
+}
+
+.coop-team-hud__identity {
+  min-width: 0;
+}
+
+.coop-team-hud__label,
+.coop-team-hud__alive {
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.coop-team-hud__label {
+  color: #89d9ff;
+}
+
+.coop-team-hud__names {
+  display: block;
+  max-width: 205px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: rgba(229, 242, 248, 0.76);
+  font-size: 0.62rem;
+  font-weight: 780;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coop-team-hud__score {
+  display: block;
+  color: #f4fbff;
+  font-size: 1.12rem;
+  font-weight: 1000;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+  text-shadow: 0 0 12px rgba(99, 199, 250, 0.38);
+}
+
+.coop-team-hud__alive {
+  color: #9fe7bd;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.coop-team-hud.is-wiped {
+  border-color: rgba(255, 111, 111, 0.55);
+  background:
+    linear-gradient(145deg, rgba(73, 19, 24, 0.82), rgba(17, 5, 7, 0.68));
+}
+
+.coop-team-hud.is-wiped .coop-team-hud__alive {
+  color: #ff9a9a;
+}
+
+/* --------------------------------------------------------------------------
+   Mobile and constrained lobby layouts
+   -------------------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .lobby-score-stack {
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .waiting-room-status-line {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .game-mode-switch {
+    grid-template-columns: repeat(2, minmax(66px, 1fr));
+  }
+
+  .coop-team-hud {
+    top: 6px;
+    right: 6px;
+    left: auto;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 9px;
+    min-width: 0;
+    width: min(238px, calc(100% - 142px));
+    padding: 6px 8px;
+    transform: none;
+    border-radius: 6px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  .coop-team-hud__identity {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  .coop-team-hud__score {
+    grid-column: 2;
+    grid-row: 1;
+    font-size: 0.9rem;
+  }
+
+  .coop-team-hud__alive {
+    grid-column: 1 / -1;
+    font-size: 0.48rem;
+    text-align: left;
+  }
+
+  .coop-team-hud__label {
+    font-size: 0.48rem;
+  }
+
+  .coop-team-hud__names {
+    max-width: none;
+    font-size: 0.52rem;
+  }
+}
+
+@media (max-width: 460px) {
+  .waiting-room-status-line {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .game-mode-switch {
+    width: 100%;
+  }
+
+  .game-mode-switch__button {
+    min-height: 31px;
+  }
+
+  .coop-team-hud {
+    width: min(214px, calc(100% - 126px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-mode-switch__button,
+  .coop-team-hud {
+    transition: none;
+  }
+}

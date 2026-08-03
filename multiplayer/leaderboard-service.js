@@ -15,7 +15,7 @@
 
   function formatScores(scores) {
     if (!Array.isArray(scores) || scores.length === 0) {
-      return "HIGH SCORES · NO CITY RECORDS YET";
+      return "NO CITY RECORDS YET";
     }
 
     return scores
@@ -33,7 +33,7 @@
     const track = document.getElementById("lobbyScoreTrack");
     if (!track) return;
 
-    const message = `HIGH SCORES     ◆     ${formatScores(scores)}     ◆`;
+    const message = `IND HIGH SCORE     ◆     ${formatScores(scores)}     ◆`;
     const groups = track.querySelectorAll(".lobby-score-group");
 
     groups.forEach((group) => {
