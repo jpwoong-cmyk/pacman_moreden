@@ -927,11 +927,23 @@ body.lobby-open {
    v6.0 account and Supabase room foundation
    -------------------------------------------------------------------------- */
 .account-lobby-card {
-  width: min(760px, 100%);
-  margin-inline: auto;
-  justify-self: center;
+  width: min(760px, calc(100vw - 104px));
   padding-top: clamp(24px, 4vw, 44px);
   padding-bottom: clamp(24px, 4vw, 44px);
+}
+
+/* Force the desktop lobby card into the true viewport centre. */
+@media (min-width: 951px) {
+  .lobby-screen > .account-lobby-card {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin: 0;
+    justify-self: auto;
+    transform: translate(-50%, -50%);
+    max-height: calc(100dvh - 104px);
+    overflow-y: auto;
+  }
 }
 
 .connection-status {
