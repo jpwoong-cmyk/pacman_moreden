@@ -422,7 +422,7 @@ h1 span {
   background: linear-gradient(180deg, rgba(21, 27, 30, 0.98), rgba(10, 14, 16, 0.98));
   box-shadow:
     0 30px 90px rgba(0, 0, 0, 0.55),
-    14px 14px 0 rgba(0, 0, 0, 0.34),
+    0 14px 0 rgba(0, 0, 0, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.06);
   text-align: center;
 }
@@ -928,6 +928,8 @@ body.lobby-open {
    -------------------------------------------------------------------------- */
 .account-lobby-card {
   width: min(760px, 100%);
+  margin-inline: auto;
+  justify-self: center;
   padding-top: clamp(24px, 4vw, 44px);
   padding-bottom: clamp(24px, 4vw, 44px);
 }
