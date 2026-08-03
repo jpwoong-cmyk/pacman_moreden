@@ -21,84 +21,7 @@
     }
   });
 
-  const roundOverview = {
-    active: false,
-    viewport: null,
-    normalTileSize: null
-  };
-
   let restartCooldownTimer = null;
-
-  function enableRoundOverview() {
-    roundOverview.active = true;
-  }
-
-  function disableRoundOverview() {
-    roundOverview.active = false;
-
-    if (roundOverview.viewport && Number.isFinite(roundOverview.normalTileSize)) {
-      roundOverview.viewport.tileSize = roundOverview.normalTileSize;
-    }
-
-    roundOverview.viewport = null;
-    roundOverview.normalTileSize = null;
-  }
-
-  function installMapOverviewHook() {
-    const prototype = window.MazeMap?.prototype;
-    if (!prototype || prototype.__pacRoundOverviewInstalled) return;
-
-    const originalDraw = prototype.draw;
-    if (typeof originalDraw !== "function") return;
-
-    prototype.draw = function drawWithRoundOverview(ctx, viewport, depthMode) {
-      if (roundOverview.active && viewport) {
-        if (roundOverview.viewport !== viewport) {
-          roundOverview.viewport = viewport;
-          roundOverview.normalTileSize = viewport.tileSize;
-        }
-
-        const padding = Math.max(
-          10,
-          Math.min(viewport.width, viewport.height) * 0.025
-        );
-        const portrait = viewport.height > viewport.width * 1.12;
-
-        // In portrait layouts, reserve the lower part of the board for the
-        // result panel. The complete live city is fitted into the open area
-        // above it, rather than being centred underneath the dialog.
-        const panelReserve = portrait
-          ? Math.min(viewport.height * 0.44, 520)
-          : Math.min(viewport.height * 0.16, 120);
-        const mapTop = padding;
-        const mapBottom = Math.max(
-          mapTop + 1,
-          viewport.height - panelReserve - padding
-        );
-        const usableWidth = Math.max(1, viewport.width - padding * 2);
-        const usableHeight = Math.max(1, mapBottom - mapTop);
-        const overviewTileSize = Math.max(
-          4,
-          Math.min(usableWidth / this.cols, usableHeight / this.rows)
-        );
-        const mapWidth = this.cols * overviewTileSize;
-        const mapHeight = this.rows * overviewTileSize;
-
-        viewport.tileSize = overviewTileSize;
-        viewport.offsetX = (viewport.width - mapWidth) * 0.5;
-        viewport.offsetY = mapTop + (usableHeight - mapHeight) * 0.5;
-      }
-
-      return originalDraw.call(this, ctx, viewport, depthMode);
-    };
-
-    Object.defineProperty(prototype, "__pacRoundOverviewInstalled", {
-      value: true,
-      configurable: false,
-      enumerable: false,
-      writable: false
-    });
-  }
 
   function createId() {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -496,7 +419,6 @@
     };
   }
 
-  installMapOverviewHook();
   const ui = ensureUI();
 
   window.PacmanPowerUpsUI = Object.freeze({
@@ -512,7 +434,6 @@
         node.textContent = Number(score || 0).toLocaleString();
       });
 
-      enableRoundOverview();
       ui.result.classList.remove("hidden");
       startRestartCooldown(ui.restart);
       ui.panel?.focus({ preventScroll: true });
@@ -520,7 +441,6 @@
     hideRoundOver() {
       if (!ui) return;
       stopRestartCooldown(ui.restart);
-      disableRoundOverview();
       ui.result.classList.add("hidden");
     }
   });

@@ -48,6 +48,7 @@
     scores: new Map(),
     alive: new Map(),
     powers: new Map(),
+    deathPositions: new Map(),
     alertedUserIds: new Set(),
     running: false,
     worldReady: false,
@@ -251,17 +252,41 @@
     window.PacmanAudio?.playGameOver();
 
     if (window.PacmanLeaderboard) {
-      void window.PacmanLeaderboard.submitScore(localScore())
-        .then(() => window.PacmanLeaderboard.refreshTicker())
+      void window.PacmanLeaderboard
+        .submitScore(localScore())
         .catch(() => {});
     }
   }
 
   function applyLocalAliveState(alive, playerState = null) {
     const nextAlive = alive !== false;
+    const x = Number(playerState?.x);
+    const y = Number(playerState?.y);
+    const hasPosition = Number.isFinite(x) && Number.isFinite(y);
+
     state.alive.set(state.currentUserId, nextAlive);
 
     if (!nextAlive) {
+      const deathPosition = hasPosition
+        ? { x, y }
+        : state.deathPositions.get(state.currentUserId) ||
+          (
+            state.pacman
+              ? { x: state.pacman.x, y: state.pacman.y }
+              : null
+          );
+
+      if (deathPosition) {
+        state.pacman.x = deathPosition.x;
+        state.pacman.y = deathPosition.y;
+        state.deathPositions.set(
+          state.currentUserId,
+          deathPosition
+        );
+      }
+
+      state.pacman.dir = { x: 0, y: 0 };
+      state.pacman.nextDir = { x: 0, y: 0 };
       showRoundOver();
       return;
     }
@@ -269,16 +294,16 @@
     if (!state.localCaught) return;
     state.localCaught = false;
 
-    const x = Number(playerState?.x);
-    const y = Number(playerState?.y);
-    if (Number.isFinite(x) && Number.isFinite(y)) {
-      state.pacman.x = x;
-      state.pacman.y = y;
-    } else {
-      const start = startTileForUser(state.currentUserId);
-      state.pacman.x = start.x;
-      state.pacman.y = start.y;
-    }
+    const rememberedPosition =
+      state.deathPositions.get(state.currentUserId);
+
+    const restartPosition = hasPosition
+      ? { x, y }
+      : rememberedPosition || startTileForUser(state.currentUserId);
+
+    state.pacman.x = restartPosition.x;
+    state.pacman.y = restartPosition.y;
+    state.deathPositions.delete(state.currentUserId);
 
     state.pacman.dir = { x: 0, y: 0 };
     state.pacman.nextDir = { x: 0, y: 0 };
@@ -474,17 +499,55 @@
         state.scores.set(event.userId, Math.max(0, Number(event.score) || 0));
         setPowerState(event.userId, event.powers);
       }
-    } else if (event.type === "round-ended" || event.type === "player-caught") {
-      state.alive.set(event.userId, false);
-      if (event.userId) {
-        state.scores.set(event.userId, Math.max(0, Number(event.score) || 0));
-        setPowerState(event.userId, event.powers || defaultPowerState());
+    } else if (
+      event.type === "round-ended" ||
+      event.type === "player-caught"
+    ) {
+      const deathX = Number(event.x);
+      const deathY = Number(event.y);
+      const hasDeathPosition =
+        Number.isFinite(deathX) && Number.isFinite(deathY);
+
+      if (hasDeathPosition && event.userId) {
+        const deathPosition = { x: deathX, y: deathY };
+        state.deathPositions.set(event.userId, deathPosition);
+
+        if (event.userId === state.currentUserId) {
+          state.pacman.x = deathX;
+          state.pacman.y = deathY;
+        } else {
+          state.remotePlayers.setPosition(
+            event.userId,
+            deathPosition
+          );
+        }
       }
+
+      state.alive.set(event.userId, false);
+
+      if (event.userId) {
+        state.scores.set(
+          event.userId,
+          Math.max(0, Number(event.score) || 0)
+        );
+        setPowerState(
+          event.userId,
+          event.powers || defaultPowerState()
+        );
+      }
+
       state.remotePlayers.setAlive(event.userId, false);
-      if (event.userId === state.currentUserId) applyLocalAliveState(false);
+
+      if (event.userId === state.currentUserId) {
+        applyLocalAliveState(
+          false,
+          hasDeathPosition ? { x: deathX, y: deathY } : null
+        );
+      }
     } else if (event.type === "player-restarted") {
       state.alive.set(event.userId, true);
       state.scores.set(event.userId, 0);
+      state.deathPositions.delete(event.userId);
       setPowerState(event.userId, event.powers || defaultPowerState());
       state.remotePlayers.setAlive(event.userId, true);
       state.remotePlayers.setPosition(event.userId, event);
@@ -550,6 +613,7 @@
     state.scores = new Map();
     state.alive = new Map();
     state.powers = new Map();
+    state.deathPositions = new Map();
     state.alertedUserIds = new Set();
     ensureRosterState();
 
@@ -607,6 +671,7 @@
     state.scores = new Map();
     state.alive = new Map();
     state.powers = new Map();
+    state.deathPositions = new Map();
     ensureRosterState();
 
     window.PacmanWorldSync?.stop();
@@ -757,21 +822,65 @@
       .sort((a, b) => a.distance - b.distance)[0]?.creep || null;
   }
 
-  function endPlayerRound(userId) {
-    const score = Math.max(0, Number(state.scores.get(userId)) || 0);
+  function endPlayerRound(userId, playerPosition = null) {
+    const score = Math.max(
+      0,
+      Number(state.scores.get(userId)) || 0
+    );
     const clearedPowers = defaultPowerState();
+
+    const playerActor =
+      playerPosition ||
+      (
+        userId === state.currentUserId
+          ? state.pacman
+          : state.remotePlayers.getPlayerByUserId(userId)?.pacman
+      );
+
+    const deathX = Number(playerActor?.x);
+    const deathY = Number(playerActor?.y);
+    const hasDeathPosition =
+      Number.isFinite(deathX) && Number.isFinite(deathY);
+
+    if (hasDeathPosition) {
+      const deathPosition = { x: deathX, y: deathY };
+      state.deathPositions.set(userId, deathPosition);
+
+      if (userId === state.currentUserId) {
+        state.pacman.x = deathX;
+        state.pacman.y = deathY;
+      } else {
+        state.remotePlayers.setPosition(
+          userId,
+          deathPosition
+        );
+      }
+    }
+
     state.alive.set(userId, false);
     state.powers.set(userId, clearedPowers);
     state.remotePlayers.setAlive(userId, false);
 
-    if (userId === state.currentUserId) applyLocalAliveState(false);
+    if (userId === state.currentUserId) {
+      applyLocalAliveState(
+        false,
+        hasDeathPosition ? { x: deathX, y: deathY } : null
+      );
+    }
 
-    window.PacmanWorldSync.sendEvent({
+    const roundEndedEvent = {
       type: "round-ended",
       userId,
       score,
       powers: clearedPowers
-    });
+    };
+
+    if (hasDeathPosition) {
+      roundEndedEvent.x = deathX;
+      roundEndedEvent.y = deathY;
+    }
+
+    window.PacmanWorldSync.sendEvent(roundEndedEvent);
   }
 
   function resolveCreepCollisions(actors) {
@@ -813,35 +922,84 @@
         return;
       }
 
-      endPlayerRound(actor.userId);
+      endPlayerRound(actor.userId, actor);
     });
   }
 
-  function restartPlayerRound(userId) {
-    if (!userId || state.alive.get(userId) !== false) return false;
+  function restartPlayerRound(userId, requestedPosition = null) {
+    if (!userId || state.alive.get(userId) !== false) {
+      return false;
+    }
+
     const knownPlayer =
       userId === state.currentUserId ||
-      state.roster.some((member) => member.user_id === userId);
+      state.roster.some(
+        (member) => member.user_id === userId
+      );
+
     if (!knownPlayer) return false;
 
-    const start = startTileForUser(userId);
+    const rememberedPosition = state.deathPositions.get(userId);
+    const requestedX = Number(requestedPosition?.x);
+    const requestedY = Number(requestedPosition?.y);
+
+    const playerActor =
+      userId === state.currentUserId
+        ? state.pacman
+        : state.remotePlayers.getPlayerByUserId(userId)?.pacman;
+
+    const actorX = Number(playerActor?.x);
+    const actorY = Number(playerActor?.y);
+    const fallback = startTileForUser(userId);
+
+    const restartPosition =
+      (
+        rememberedPosition &&
+        Number.isFinite(Number(rememberedPosition.x)) &&
+        Number.isFinite(Number(rememberedPosition.y))
+      )
+        ? {
+            x: Number(rememberedPosition.x),
+            y: Number(rememberedPosition.y)
+          }
+        : (
+            Number.isFinite(requestedX) &&
+            Number.isFinite(requestedY)
+          )
+          ? { x: requestedX, y: requestedY }
+          : (
+              Number.isFinite(actorX) &&
+              Number.isFinite(actorY)
+            )
+            ? { x: actorX, y: actorY }
+            : fallback;
+
     const powers = defaultPowerState();
+
     state.scores.set(userId, 0);
     state.alive.set(userId, true);
     state.powers.set(userId, powers);
-    state.remotePlayers.setAlive(userId, true);
-    state.remotePlayers.setPosition(userId, start);
+    state.deathPositions.delete(userId);
 
-    if (userId === state.currentUserId) applyLocalAliveState(true, start);
+    state.remotePlayers.setAlive(userId, true);
+    state.remotePlayers.setPosition(
+      userId,
+      restartPosition
+    );
+
+    if (userId === state.currentUserId) {
+      applyLocalAliveState(true, restartPosition);
+    }
 
     window.PacmanWorldSync.sendEvent({
       type: "player-restarted",
       userId,
-      x: start.x,
-      y: start.y,
+      x: restartPosition.x,
+      y: restartPosition.y,
       score: 0,
       powers
     });
+
     return true;
   }
 
@@ -1240,7 +1398,7 @@
       payload?.roundAction === "restart-round" &&
       payload.userId
     ) {
-      restartPlayerRound(payload.userId);
+      restartPlayerRound(payload.userId, payload);
       return;
     }
 
