@@ -1,10 +1,10 @@
 (function () {
   "use strict";
 
-  const POSITION_BROADCAST_INTERVAL = 1 / 12;
-  const WORLD_FRAME_INTERVAL = 0.1;
-  const WORLD_SNAPSHOT_INTERVAL = 2;
-  const WORLD_SAVE_INTERVAL = 5;
+  const POSITION_BROADCAST_INTERVAL = 1 / 8;
+  const WORLD_FRAME_INTERVAL = 1 / 8;
+  const WORLD_SNAPSHOT_INTERVAL = 5;
+  const WORLD_SAVE_INTERVAL = 15;
   const STARTING_PELLET_COUNT = 180;
   const BASE_PACMAN_SPEED = 5.8;
   const RUSH_SPEED_MULTIPLIER = 1.25;
@@ -62,6 +62,8 @@
     worldSnapshotAccumulator: 0,
     worldSaveAccumulator: 0,
     broadcastSequence: 0,
+    lastBroadcastDirX: 0,
+    lastBroadcastDirY: 0,
     lastTime: performance.now(),
     overlayAction: "none",
     viewport: {
@@ -323,7 +325,6 @@
   }
 
   function buildWorldFrame() {
-    const actors = allPlayerActors();
     return {
       elapsed: state.elapsed,
       spawnTimer: state.spawnTimer,
@@ -334,8 +335,7 @@
       creeps: state.creeps.toSnapshot(),
       scores: objectFromMap(state.scores),
       alive: objectFromMap(state.alive),
-      alertedUserIds: state.creeps.getAlertedUserIds(),
-      players: playerStatesFromActors(actors)
+      alertedUserIds: state.creeps.getAlertedUserIds()
     };
   }
 
@@ -437,7 +437,6 @@
     ensureRosterState();
     state.powerups.applySnapshot(frame.powerups || []);
     state.creeps.applyFrame(frame.creeps || []);
-    applyPlayerStates(frame.players || []);
     state.worldReady = true;
 
     pauseButton.textContent = state.sharedPaused ? "Resume" : "Pause";
@@ -600,6 +599,8 @@
     state.localCaught = false;
     state.broadcastAccumulator = POSITION_BROADCAST_INTERVAL;
     state.broadcastSequence = 0;
+    state.lastBroadcastDirX = 0;
+    state.lastBroadcastDirY = 0;
     state.lastTime = performance.now();
 
     createGameObjects(state.mapSeed, true);
@@ -664,11 +665,12 @@
       !state.pacman ||
       !window.PacmanMultiplayer
     ) {
-      return;
+      return false;
     }
 
     state.broadcastSequence += 1;
-    window.PacmanMultiplayer.broadcastPlayerState({
+
+    const sent = window.PacmanMultiplayer.broadcastPlayerState({
       sequence: state.broadcastSequence,
       x: Number(state.pacman.x.toFixed(4)),
       y: Number(state.pacman.y.toFixed(4)),
@@ -677,6 +679,13 @@
       angle: Number(state.pacman.angle.toFixed(4)),
       sentAt: Date.now()
     });
+
+    if (sent) {
+      state.lastBroadcastDirX = state.pacman.dir.x;
+      state.lastBroadcastDirY = state.pacman.dir.y;
+    }
+
+    return sent;
   }
 
   function resolvePelletsAndCreepMovement(actors, dt) {
@@ -931,6 +940,14 @@
 
     if (!state.sharedPaused && localAlive()) {
       state.pacman.update(dt, state.map);
+
+      const directionChanged =
+        state.pacman.dir.x !== state.lastBroadcastDirX ||
+        state.pacman.dir.y !== state.lastBroadcastDirY;
+
+      if (directionChanged && sendPlayerSnapshot()) {
+        state.broadcastAccumulator = 0;
+      }
     }
 
     if (isHost()) {

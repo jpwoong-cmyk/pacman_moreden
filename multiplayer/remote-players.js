@@ -64,25 +64,32 @@
       this.alive = playerState.alive !== false;
       this.score = Math.max(0, Number(playerState.score) || 0);
 
+      /*
+      * World snapshots provide a starting position for newly discovered
+      * players. Once direct player-state updates are arriving, do not let an
+      * older world snapshot overwrite the live movement target.
+      */
+      if (this.hasNetworkState) return;
+
       const x = Number(playerState.x);
       const y = Number(playerState.y);
+
       if (Number.isFinite(x) && Number.isFinite(y)) {
         this.targetX = x;
         this.targetY = y;
-
-        if (!this.hasNetworkState) {
-          this.pacman.x = x;
-          this.pacman.y = y;
-        }
+        this.pacman.x = x;
+        this.pacman.y = y;
       }
 
       this.targetAngle = Number.isFinite(Number(playerState.angle))
         ? Number(playerState.angle)
         : this.targetAngle;
+
       this.pacman.dir = {
         x: Number(playerState.dirX) || 0,
         y: Number(playerState.dirY) || 0
       };
+
       this.hasNetworkState = true;
     }
 
