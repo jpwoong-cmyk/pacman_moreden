@@ -57,6 +57,15 @@
     }
   }
 
+  function resetRoomActionButtons() {
+    setBusy(createGameButton, false);
+    setBusy(startRoomButton, false);
+    setBusy(leaveWaitingRoomButton, false);
+
+    startRoomButton.textContent = "Start Game";
+    leaveWaitingRoomButton.textContent = "Leave Room";
+  }
+
   function showAuthPanel(panel = "choice") {
     authChoice.hidden = panel !== "choice";
     createAccountForm.hidden = panel !== "create";
@@ -89,6 +98,13 @@
   function launchGame(room, players = [], currentUserId = null) {
     if (!room?.code) return;
 
+    /*
+     * The Start Game button is reused when another room is created later.
+     * Restore it before hiding the lobby so it cannot remain disabled after
+     * the first successful match start.
+     */
+    resetRoomActionButtons();
+
     lobbyScreen.classList.add("hidden");
     lobbyScreen.setAttribute("aria-hidden", "true");
     gameShell.inert = false;
@@ -105,12 +121,14 @@
     authView.hidden = true;
     roomView.hidden = false;
     accountDisplayName.textContent = profile?.account_name || profile?.display_name || "Player";
+    resetRoomActionButtons();
     showRoomPanel("choice");
   }
 
   function setSignedOut() {
     currentProfile = null;
     currentRoom = null;
+    resetRoomActionButtons();
     authView.hidden = false;
     roomView.hidden = true;
     showAuthPanel("choice");
@@ -310,11 +328,20 @@
   copyRoomButton.addEventListener("click", copyRoomCode);
 
   startRoomButton.addEventListener("click", async () => {
+    if (startRoomButton.disabled) return;
+
     setBusy(startRoomButton, true, "Starting…");
+
     try {
       await window.PacmanMultiplayer.startCurrentRoom();
     } catch (error) {
       setMessage(waitingRoomMessage, error.message, "error");
+    } finally {
+      /*
+       * The original code only reset this button when an error occurred.
+       * A successful start therefore left it permanently disabled for the
+       * next room created during the same browser session.
+       */
       setBusy(startRoomButton, false);
     }
   });
@@ -324,6 +351,7 @@
     try {
       await window.PacmanMultiplayer.leaveCurrentRoom();
       currentRoom = null;
+      resetRoomActionButtons();
       showRoomPanel("choice");
     } catch (error) {
       setMessage(waitingRoomMessage, error.message, "error");
@@ -357,11 +385,14 @@
 
   document.addEventListener("pacman:room-left", () => {
     currentRoom = null;
+    resetRoomActionButtons();
     showLobby();
     if (currentProfile) showRoomPanel("choice");
   });
 
   document.addEventListener("pacman:room-closed", (event) => {
+    currentRoom = null;
+    resetRoomActionButtons();
     showLobby();
     showRoomPanel("choice");
     connectionStatus.textContent = event.detail.message || "The room was closed.";
@@ -369,7 +400,9 @@
   });
 
   document.addEventListener("pacman:leave-room", async () => {
+    resetRoomActionButtons();
     showLobby();
+
     try {
       await window.PacmanMultiplayer.leaveCurrentRoom();
     } catch (error) {
