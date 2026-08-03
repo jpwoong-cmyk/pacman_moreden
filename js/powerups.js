@@ -341,19 +341,37 @@
       hud.className = "powerup-hud";
       hud.setAttribute("aria-label", "Power-up inventory");
       hud.innerHTML = `
-        <span class="powerup-hud__item" title="Shield charges">
-          <i class="mini-pill mini-pill--shield" aria-hidden="true"></i>
-          <b id="shieldPowerValue">0</b>
-        </span>
-        <span class="powerup-hud__item" title="Rush time remaining">
-          <i class="mini-pill mini-pill--rush" aria-hidden="true"></i>
-          <b id="rushPowerValue">0.0s</b>
-        </span>
-        <span class="powerup-hud__item" title="Ghost-eating charges">
-          <i class="mini-pill mini-pill--hunter" aria-hidden="true"></i>
-          <b id="hunterPowerValue">0</b>
-        </span>
-      `;
+      <div class="powerup-hud__item" title="Invincibility charges">
+        <i class="mini-pill mini-pill--shield" aria-hidden="true"></i>
+
+        <div class="powerup-hud__details">
+          <span class="powerup-hud__label">Invincible</span>
+          <b class="powerup-hud__value">
+            +<span id="shieldPowerValue">0</span>
+          </b>
+        </div>
+      </div>
+
+      <div class="powerup-hud__item" title="Speed time remaining">
+        <i class="mini-pill mini-pill--rush" aria-hidden="true"></i>
+
+        <div class="powerup-hud__details">
+          <span class="powerup-hud__label">Speed</span>
+          <b id="rushPowerValue" class="powerup-hud__value">0.0s</b>
+        </div>
+      </div>
+
+      <div class="powerup-hud__item" title="Ghost-eating charges">
+        <i class="mini-pill mini-pill--hunter" aria-hidden="true"></i>
+
+        <div class="powerup-hud__details">
+          <span class="powerup-hud__label">Eat Ghost</span>
+          <b class="powerup-hud__value">
+            <span id="hunterPowerValue">0</span>x
+          </b>
+        </div>
+      </div>
+    `;
       boardWrap.appendChild(hud);
     }
 
