@@ -12,6 +12,7 @@
   const POWERUP_SPAWN_INTERVAL = 25;
   const SHIELD_GRACE_SECONDS = 1.25;
   const HUNTER_GRACE_SECONDS = 0.85;
+  const RESPAWN_GRACE_SECONDS = 1.5;
 
   const canvas = document.getElementById("gameCanvas");
   const ctx = canvas.getContext("2d");
@@ -184,6 +185,30 @@
     return clean;
   }
 
+  function normaliseDirection(x, y) {
+    const dx = Number(x) || 0;
+    const dy = Number(y) || 0;
+
+    if (Math.abs(dx) >= Math.abs(dy) && Math.abs(dx) > 0) {
+      return { x: dx > 0 ? 1 : -1, y: 0 };
+    }
+
+    if (Math.abs(dy) > 0) {
+      return { x: 0, y: dy > 0 ? 1 : -1 };
+    }
+
+    return { x: 0, y: 0 };
+  }
+
+  function isAtTileCentre(position) {
+    if (!position) return false;
+
+    return (
+      Math.abs(Number(position.x) - Math.round(Number(position.x))) < 0.0001 &&
+      Math.abs(Number(position.y) - Math.round(Number(position.y))) < 0.0001
+    );
+  }
+
   function startTileForUser(userId) {
     const member = state.roster.find((item) => item.user_id === userId);
     return state.map.getPlayerStartTile(member?.player_slot || 1);
@@ -264,24 +289,60 @@
     const y = Number(playerState?.y);
     const hasPosition = Number.isFinite(x) && Number.isFinite(y);
 
+    const suppliedDirection = normaliseDirection(
+      playerState?.dirX,
+      playerState?.dirY
+    );
+
+    const currentDirection = normaliseDirection(
+      state.pacman?.dir?.x,
+      state.pacman?.dir?.y
+    );
+
+    const suppliedAngle = Number(playerState?.angle);
     state.alive.set(state.currentUserId, nextAlive);
 
     if (!nextAlive) {
+      const previousDeathState =
+        state.deathPositions.get(state.currentUserId);
+
       const deathPosition = hasPosition
         ? { x, y }
-        : state.deathPositions.get(state.currentUserId) ||
+        : previousDeathState ||
           (
             state.pacman
               ? { x: state.pacman.x, y: state.pacman.y }
               : null
           );
 
+      const deathDirection =
+        suppliedDirection.x !== 0 || suppliedDirection.y !== 0
+          ? suppliedDirection
+          : (
+              currentDirection.x !== 0 || currentDirection.y !== 0
+                ? currentDirection
+                : normaliseDirection(
+                    previousDeathState?.dirX,
+                    previousDeathState?.dirY
+                  )
+            );
+
       if (deathPosition) {
-        state.pacman.x = deathPosition.x;
-        state.pacman.y = deathPosition.y;
+        const rememberedDeathState = {
+          x: deathPosition.x,
+          y: deathPosition.y,
+          dirX: deathDirection.x,
+          dirY: deathDirection.y,
+          angle: Number.isFinite(suppliedAngle)
+            ? suppliedAngle
+            : Number(state.pacman?.angle) || 0
+        };
+
+        state.pacman.x = rememberedDeathState.x;
+        state.pacman.y = rememberedDeathState.y;
         state.deathPositions.set(
           state.currentUserId,
-          deathPosition
+          rememberedDeathState
         );
       }
 
@@ -294,19 +355,50 @@
     if (!state.localCaught) return;
     state.localCaught = false;
 
-    const rememberedPosition =
+    const rememberedDeathState =
       state.deathPositions.get(state.currentUserId);
 
     const restartPosition = hasPosition
       ? { x, y }
-      : rememberedPosition || startTileForUser(state.currentUserId);
+      : rememberedDeathState || startTileForUser(state.currentUserId);
+
+    const rememberedDirection = normaliseDirection(
+      rememberedDeathState?.dirX,
+      rememberedDeathState?.dirY
+    );
+
+    const restartDirection =
+      suppliedDirection.x !== 0 || suppliedDirection.y !== 0
+        ? suppliedDirection
+        : rememberedDirection;
 
     state.pacman.x = restartPosition.x;
     state.pacman.y = restartPosition.y;
-    state.deathPositions.delete(state.currentUserId);
 
-    state.pacman.dir = { x: 0, y: 0 };
-    state.pacman.nextDir = { x: 0, y: 0 };
+    /*
+     * Pacman can only accept a new turn at a tile centre. When the exact
+     * death coordinate is between centres, keep the previous travel
+     * direction so he can reach the next centre instead of being trapped.
+     */
+    if (
+      !isAtTileCentre(restartPosition) &&
+      (restartDirection.x !== 0 || restartDirection.y !== 0)
+    ) {
+      state.pacman.dir = { ...restartDirection };
+      state.pacman.nextDir = { ...restartDirection };
+    } else {
+      state.pacman.dir = { x: 0, y: 0 };
+      state.pacman.nextDir = { x: 0, y: 0 };
+    }
+
+    const restartAngle = Number(playerState?.angle);
+    if (Number.isFinite(restartAngle)) {
+      state.pacman.angle = restartAngle;
+    }
+
+    state.deathPositions.delete(state.currentUserId);
+    state.broadcastAccumulator = POSITION_BROADCAST_INTERVAL;
+
     window.PacmanPowerUpsUI?.hideRoundOver();
     hideOverlay();
     window.PacmanAudio?.playGame();
@@ -509,7 +601,19 @@
         Number.isFinite(deathX) && Number.isFinite(deathY);
 
       if (hasDeathPosition && event.userId) {
-        const deathPosition = { x: deathX, y: deathY };
+        const deathDirection = normaliseDirection(
+          event.dirX,
+          event.dirY
+        );
+
+        const deathPosition = {
+          x: deathX,
+          y: deathY,
+          dirX: deathDirection.x,
+          dirY: deathDirection.y,
+          angle: Number(event.angle) || 0
+        };
+
         state.deathPositions.set(event.userId, deathPosition);
 
         if (event.userId === state.currentUserId) {
@@ -541,17 +645,29 @@
       if (event.userId === state.currentUserId) {
         applyLocalAliveState(
           false,
-          hasDeathPosition ? { x: deathX, y: deathY } : null
+          hasDeathPosition
+            ? {
+                x: deathX,
+                y: deathY,
+                dirX: event.dirX,
+                dirY: event.dirY,
+                angle: event.angle
+              }
+            : null
         );
       }
     } else if (event.type === "player-restarted") {
       state.alive.set(event.userId, true);
       state.scores.set(event.userId, 0);
-      state.deathPositions.delete(event.userId);
       setPowerState(event.userId, event.powers || defaultPowerState());
       state.remotePlayers.setAlive(event.userId, true);
       state.remotePlayers.setPosition(event.userId, event);
-      if (event.userId === state.currentUserId) applyLocalAliveState(true, event);
+
+      if (event.userId === state.currentUserId) {
+        applyLocalAliveState(true, event);
+      } else {
+        state.deathPositions.delete(event.userId);
+      }
     } else if (event.type === "pause-changed") {
       state.sharedPaused = Boolean(event.paused);
     }
@@ -842,8 +958,22 @@
     const hasDeathPosition =
       Number.isFinite(deathX) && Number.isFinite(deathY);
 
+    const deathDirection = normaliseDirection(
+      playerActor?.dir?.x,
+      playerActor?.dir?.y
+    );
+
+    const deathAngle = Number(playerActor?.angle) || 0;
+
     if (hasDeathPosition) {
-      const deathPosition = { x: deathX, y: deathY };
+      const deathPosition = {
+        x: deathX,
+        y: deathY,
+        dirX: deathDirection.x,
+        dirY: deathDirection.y,
+        angle: deathAngle
+      };
+
       state.deathPositions.set(userId, deathPosition);
 
       if (userId === state.currentUserId) {
@@ -864,7 +994,15 @@
     if (userId === state.currentUserId) {
       applyLocalAliveState(
         false,
-        hasDeathPosition ? { x: deathX, y: deathY } : null
+        hasDeathPosition
+          ? {
+              x: deathX,
+              y: deathY,
+              dirX: deathDirection.x,
+              dirY: deathDirection.y,
+              angle: deathAngle
+            }
+          : null
       );
     }
 
@@ -878,6 +1016,9 @@
     if (hasDeathPosition) {
       roundEndedEvent.x = deathX;
       roundEndedEvent.y = deathY;
+      roundEndedEvent.dirX = deathDirection.x;
+      roundEndedEvent.dirY = deathDirection.y;
+      roundEndedEvent.angle = deathAngle;
     }
 
     window.PacmanWorldSync.sendEvent(roundEndedEvent);
@@ -939,7 +1080,7 @@
 
     if (!knownPlayer) return false;
 
-    const rememberedPosition = state.deathPositions.get(userId);
+    const rememberedDeathState = state.deathPositions.get(userId);
     const requestedX = Number(requestedPosition?.x);
     const requestedY = Number(requestedPosition?.y);
 
@@ -954,13 +1095,13 @@
 
     const restartPosition =
       (
-        rememberedPosition &&
-        Number.isFinite(Number(rememberedPosition.x)) &&
-        Number.isFinite(Number(rememberedPosition.y))
+        rememberedDeathState &&
+        Number.isFinite(Number(rememberedDeathState.x)) &&
+        Number.isFinite(Number(rememberedDeathState.y))
       )
         ? {
-            x: Number(rememberedPosition.x),
-            y: Number(rememberedPosition.y)
+            x: Number(rememberedDeathState.x),
+            y: Number(rememberedDeathState.y)
           }
         : (
             Number.isFinite(requestedX) &&
@@ -974,28 +1115,73 @@
             ? { x: actorX, y: actorY }
             : fallback;
 
-    const powers = defaultPowerState();
+    const rememberedDirection = normaliseDirection(
+      rememberedDeathState?.dirX,
+      rememberedDeathState?.dirY
+    );
+
+    const requestedDirection = normaliseDirection(
+      requestedPosition?.dirX,
+      requestedPosition?.dirY
+    );
+
+    const actorDirection = normaliseDirection(
+      playerActor?.dir?.x,
+      playerActor?.dir?.y
+    );
+
+    const restartDirection =
+      rememberedDirection.x !== 0 || rememberedDirection.y !== 0
+        ? rememberedDirection
+        : (
+            requestedDirection.x !== 0 || requestedDirection.y !== 0
+              ? requestedDirection
+              : actorDirection
+          );
+
+    const restartAngle = Number.isFinite(
+      Number(rememberedDeathState?.angle)
+    )
+      ? Number(rememberedDeathState.angle)
+      : Number(requestedPosition?.angle) || Number(playerActor?.angle) || 0;
+
+    const powers = {
+      ...defaultPowerState(),
+      graceUntil: state.elapsed + RESPAWN_GRACE_SECONDS
+    };
+
+    const restartState = {
+      x: restartPosition.x,
+      y: restartPosition.y,
+      dirX: restartDirection.x,
+      dirY: restartDirection.y,
+      angle: restartAngle
+    };
 
     state.scores.set(userId, 0);
     state.alive.set(userId, true);
     state.powers.set(userId, powers);
-    state.deathPositions.delete(userId);
 
     state.remotePlayers.setAlive(userId, true);
     state.remotePlayers.setPosition(
       userId,
-      restartPosition
+      restartState
     );
 
     if (userId === state.currentUserId) {
-      applyLocalAliveState(true, restartPosition);
+      applyLocalAliveState(true, restartState);
+    } else {
+      state.deathPositions.delete(userId);
     }
 
     window.PacmanWorldSync.sendEvent({
       type: "player-restarted",
       userId,
-      x: restartPosition.x,
-      y: restartPosition.y,
+      x: restartState.x,
+      y: restartState.y,
+      dirX: restartState.dirX,
+      dirY: restartState.dirY,
+      angle: restartState.angle,
       score: 0,
       powers
     });
@@ -1011,15 +1197,25 @@
       return;
     }
 
+    const rememberedDeathState =
+      state.deathPositions.get(state.currentUserId);
+
+    const restartDirection = normaliseDirection(
+      rememberedDeathState?.dirX,
+      rememberedDeathState?.dirY
+    );
+
     state.broadcastSequence += 1;
     window.PacmanMultiplayer.broadcastPlayerState({
       sequence: state.broadcastSequence,
       roundAction: "restart-round",
       x: Number(state.pacman.x.toFixed(4)),
       y: Number(state.pacman.y.toFixed(4)),
-      dirX: 0,
-      dirY: 0,
-      angle: Number(state.pacman.angle || 0),
+      dirX: restartDirection.x,
+      dirY: restartDirection.y,
+      angle: Number(
+        rememberedDeathState?.angle ?? state.pacman.angle ?? 0
+      ),
       sentAt: Date.now()
     });
   }
