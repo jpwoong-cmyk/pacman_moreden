@@ -422,97 +422,148 @@
     }
 
     drawFace(ctx, radius, timeSeconds) {
-      const eyeY = -radius * 0.16;
-      const pupilOffsetX = this.dir.x * radius * 0.055;
-      const pupilOffsetY = this.dir.y * radius * 0.045;
+      const eyeY = -radius * 0.08;
+      const pupilOffsetX = this.dir.x * radius * 0.045;
+      const pupilOffsetY = this.dir.y * radius * 0.035;
+      const eyeHeight = this.afraid ? radius * 0.39 : radius * 0.43;
 
       [-0.34, 0.34].forEach((side) => {
+        const eyeX = radius * side;
+        const tilt = side * (this.afraid ? -0.07 : 0.025);
+
+        ctx.save();
+        ctx.translate(eyeX, eyeY);
+        ctx.rotate(tilt);
+
+        /* Large anime-style white eye. */
         ctx.fillStyle = "#fbfdff";
+        ctx.strokeStyle = "rgba(39, 49, 62, 0.92)";
+        ctx.lineWidth = Math.max(1.15, radius * 0.065);
         ctx.beginPath();
         ctx.ellipse(
-          radius * side,
-          eyeY,
+          0,
+          0,
+          radius * 0.285,
+          eyeHeight,
+          0,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+        ctx.stroke();
+
+        /* Oversized glossy iris creates the puppy-eye look. */
+        const irisX = pupilOffsetX;
+        const irisY = radius * 0.045 + pupilOffsetY;
+        const iris = ctx.createRadialGradient(
+          irisX - radius * 0.055,
+          irisY - radius * 0.085,
+          radius * 0.025,
+          irisX,
+          irisY,
+          radius * 0.19
+        );
+        iris.addColorStop(0, this.afraid ? "#8fd7ff" : "#c9e8ff");
+        iris.addColorStop(0.3, this.afraid ? "#416d9a" : "#557da4");
+        iris.addColorStop(0.72, "#172438");
+        iris.addColorStop(1, "#070c14");
+
+        ctx.fillStyle = iris;
+        ctx.beginPath();
+        ctx.ellipse(
+          irisX,
+          irisY,
+          radius * 0.19,
           radius * 0.245,
-          radius * 0.315,
           0,
           0,
           Math.PI * 2
         );
         ctx.fill();
 
-        ctx.fillStyle = this.afraid ? "#243347" : "#172131";
+        ctx.fillStyle = "#05080d";
         ctx.beginPath();
         ctx.ellipse(
-          radius * side + pupilOffsetX,
-          eyeY + radius * 0.055 + pupilOffsetY,
-          radius * 0.112,
-          radius * 0.145,
+          irisX,
+          irisY + radius * 0.02,
+          radius * 0.092,
+          radius * 0.135,
           0,
           0,
           Math.PI * 2
         );
         ctx.fill();
 
-        ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+        /* Two bright highlights and a lower shimmer keep the eyes anime-like. */
+        ctx.fillStyle = "rgba(255, 255, 255, 0.98)";
         ctx.beginPath();
         ctx.arc(
-          radius * side - radius * 0.035 + pupilOffsetX,
-          eyeY + radius * 0.005 + pupilOffsetY,
-          radius * 0.038,
+          irisX - radius * 0.075,
+          irisY - radius * 0.105,
+          radius * 0.064,
           0,
           Math.PI * 2
         );
         ctx.fill();
-      });
 
-      ctx.strokeStyle = "#56616d";
-      ctx.lineWidth = Math.max(1.2, radius * 0.07);
-      ctx.lineCap = "round";
-
-      if (this.afraid) {
         ctx.beginPath();
-        ctx.moveTo(-radius * 0.5, -radius * 0.54);
-        ctx.lineTo(-radius * 0.16, -radius * 0.42);
-        ctx.moveTo(radius * 0.5, -radius * 0.54);
-        ctx.lineTo(radius * 0.16, -radius * 0.42);
-        ctx.stroke();
+        ctx.arc(
+          irisX + radius * 0.065,
+          irisY - radius * 0.025,
+          radius * 0.032,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
 
-        ctx.fillStyle = "#37414c";
+        ctx.fillStyle = this.afraid
+          ? "rgba(142, 220, 255, 0.78)"
+          : "rgba(202, 235, 255, 0.68)";
         ctx.beginPath();
         ctx.ellipse(
-          0,
-          radius * 0.38,
-          radius * 0.18,
-          radius * 0.14,
+          irisX,
+          irisY + radius * 0.145,
+          radius * 0.105,
+          radius * 0.026,
           0,
           0,
           Math.PI * 2
         );
         ctx.fill();
 
-        this.drawTears(ctx, radius, timeSeconds);
-      } else {
+        /* Dark upper lash line, still part of the eye rather than a brow. */
+        ctx.strokeStyle = "rgba(28, 36, 48, 0.96)";
+        ctx.lineWidth = Math.max(1.35, radius * 0.075);
+        ctx.lineCap = "round";
         ctx.beginPath();
-        ctx.moveTo(-radius * 0.47, -radius * 0.47);
-        ctx.quadraticCurveTo(
-          -radius * 0.32,
-          -radius * 0.6,
-          -radius * 0.15,
-          -radius * 0.47
-        );
-        ctx.moveTo(radius * 0.47, -radius * 0.47);
-        ctx.quadraticCurveTo(
-          radius * 0.32,
-          -radius * 0.6,
-          radius * 0.15,
-          -radius * 0.47
+        ctx.arc(
+          0,
+          -radius * 0.015,
+          radius * 0.29,
+          Math.PI * 1.08,
+          Math.PI * 1.92
         );
         ctx.stroke();
 
-        ctx.strokeStyle = "#4e5965";
-        ctx.beginPath();
-        ctx.arc(0, radius * 0.24, radius * 0.17, 0.12, Math.PI - 0.12);
-        ctx.stroke();
+        if (this.afraid) {
+          ctx.strokeStyle = "rgba(102, 201, 255, 0.9)";
+          ctx.lineWidth = Math.max(1, radius * 0.045);
+          ctx.beginPath();
+          ctx.arc(
+            0,
+            radius * 0.02,
+            radius * 0.255,
+            0.12,
+            Math.PI - 0.12
+          );
+          ctx.stroke();
+        }
+
+        ctx.restore();
+      });
+
+      if (this.afraid) {
+        this.drawTears(ctx, radius, timeSeconds);
       }
     }
 
