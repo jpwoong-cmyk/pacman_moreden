@@ -25,7 +25,7 @@
     { min: 1700, name: "Crown Gold", light: "#fffdf0", mid: "#ffde25", dark: "#9d5500", glow: "rgba(255, 222, 37, 0.96)", sparkle: true },
     { min: 1800, name: "Prestige Gold", light: "#ffffff", mid: "#ffe23a", dark: "#9b5100", glow: "rgba(255, 226, 58, 0.98)", sparkle: true },
     { min: 1900, name: "Majestic Gold", light: "#ffffff", mid: "#ffe74f", dark: "#934800", glow: "rgba(255, 231, 79, 1)", sparkle: true },
-    { min: 2000, name: "Royal Metallic Vibrant Gold", light: "#ffffff", mid: "#ffd21a", dark: "#7d3900", glow: "rgba(255, 215, 43, 1)", sparkle: true, metallic: true }
+    { min: 2000, name: "Royal Metallic Vibrant Gold", light: "#ffffff", mid: "#ffe74f", dark: "#934800", glow: "rgba(255, 231, 79, 1)", sparkle: true, metallic: true }
   ]);
 
   const ELEMENT_ACCENTS = Object.freeze({
