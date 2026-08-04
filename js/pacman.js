@@ -3,6 +3,126 @@
 
   const STOP = { x: 0, y: 0 };
 
+  function drawPacmanPath(ctx, radius, mouth) {
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, radius, mouth, Math.PI * 2 - mouth);
+    ctx.closePath();
+  }
+
+  function fallbackSkin(remote) {
+    if (remote) {
+      return {
+        light: "#e4ca68",
+        mid: "#c3a33d",
+        dark: "#745416",
+        glow: "rgba(195, 163, 61, 0.46)",
+        labelColor: "#f3df9d",
+        sparkle: false,
+        metallic: false,
+        element: null,
+        accent: null,
+        accentLight: null,
+        particle: null
+      };
+    }
+
+    return {
+      light: "#e4ca68",
+      mid: "#c3a33d",
+      dark: "#745416",
+      glow: "rgba(195, 163, 61, 0.46)",
+      labelColor: "#f3df9d",
+      sparkle: false,
+      metallic: false,
+      element: null,
+      accent: null,
+      accentLight: null,
+      particle: null
+    };
+  }
+
+  function drawMetallicSweep(ctx, radius, mouth, timeSeconds) {
+    const sweep = ((timeSeconds * 0.42) % 1.8) - 0.4;
+    const startX = -radius * 1.5 + sweep * radius * 2.4;
+
+    ctx.save();
+    drawPacmanPath(ctx, radius, mouth);
+    ctx.clip();
+
+    const metal = ctx.createLinearGradient(
+      startX - radius * 0.55,
+      -radius,
+      startX + radius * 0.55,
+      radius
+    );
+    metal.addColorStop(0, "rgba(255,255,255,0)");
+    metal.addColorStop(0.38, "rgba(255,255,255,0.05)");
+    metal.addColorStop(0.5, "rgba(255,255,255,0.72)");
+    metal.addColorStop(0.62, "rgba(255,244,178,0.16)");
+    metal.addColorStop(1, "rgba(255,255,255,0)");
+
+    ctx.fillStyle = metal;
+    ctx.fillRect(-radius * 1.4, -radius * 1.4, radius * 2.8, radius * 2.8);
+    ctx.restore();
+  }
+
+  function drawElementAccent(ctx, radius, mouth, skin, timeSeconds) {
+    if (!skin.element || !skin.accent) return;
+
+    ctx.save();
+    ctx.shadowColor = skin.glow;
+    ctx.shadowBlur = radius * 0.38;
+    ctx.strokeStyle = skin.accent;
+    ctx.lineWidth = Math.max(1.2, radius * 0.09);
+    drawPacmanPath(ctx, radius * 1.015, mouth);
+    ctx.stroke();
+    ctx.restore();
+
+    const pulse = 0.65 + Math.sin(timeSeconds * 5.2) * 0.2;
+    const particleCount = 3;
+
+    ctx.save();
+    ctx.fillStyle = skin.particle || skin.accent;
+    ctx.globalCompositeOperation = "lighter";
+
+    for (let index = 0; index < particleCount; index += 1) {
+      const phase = timeSeconds * (1.2 + index * 0.18) + index * 2.1;
+      const distance = radius * (0.72 + index * 0.28);
+      const x = -radius - distance + Math.sin(phase) * radius * 0.18;
+      const y = Math.cos(phase * 1.4) * radius * 0.42;
+      const size = Math.max(1, radius * (0.055 + index * 0.012) * pulse);
+
+      ctx.globalAlpha = 0.36 - index * 0.07;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawSparkles(ctx, radius, skin, timeSeconds) {
+    if (!skin.sparkle) return;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.globalCompositeOperation = "lighter";
+
+    for (let index = 0; index < 2; index += 1) {
+      const phase = timeSeconds * (0.9 + index * 0.3) + index * Math.PI;
+      const x = Math.cos(phase) * radius * 0.72;
+      const y = Math.sin(phase * 1.3) * radius * 0.66;
+      const size = Math.max(0.8, radius * 0.045);
+
+      ctx.globalAlpha = 0.42 + Math.sin(phase * 2.4) * 0.25;
+      ctx.fillRect(x - size * 0.5, y - size * 1.7, size, size * 3.4);
+      ctx.fillRect(x - size * 1.7, y - size * 0.5, size * 3.4, size);
+    }
+
+    ctx.restore();
+  }
+
   class Pacman {
     constructor(startTile) {
       this.speed = 5.8;
@@ -81,15 +201,17 @@
       const moving = this.dir.x !== 0 || this.dir.y !== 0;
       const mouth = moving ? 0.14 + Math.abs(Math.sin(this.movingTime * 12)) * 0.28 : 0.08;
       const remote = options.variant === "remote";
+      const timeSeconds = performance.now() / 1000;
+      const skin =
+        window.PacmanSkins?.resolveDrawSkin?.(options) ||
+        fallbackSkin(remote);
 
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(this.angle);
 
-      ctx.shadowColor = remote
-        ? "rgba(207, 218, 229, 0.68)"
-        : "rgba(255, 202, 37, 0.62)";
-      ctx.shadowBlur = tileSize * 0.24;
+      ctx.shadowColor = skin.glow;
+      ctx.shadowBlur = tileSize * (skin.metallic ? 0.34 : 0.24);
 
       const body = ctx.createRadialGradient(
         -radius * 0.3,
@@ -99,32 +221,23 @@
         0,
         radius
       );
-
-      if (remote) {
-        body.addColorStop(0, "#ffffff");
-        body.addColorStop(0.42, "#c9d0d8");
-        body.addColorStop(1, "#69717c");
-      } else {
-        body.addColorStop(0, "#fff47a");
-        body.addColorStop(0.45, "#ffd632");
-        body.addColorStop(1, "#d59a00");
-      }
+      body.addColorStop(0, skin.light);
+      body.addColorStop(0.45, skin.mid);
+      body.addColorStop(1, skin.dark);
 
       ctx.fillStyle = body;
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, radius, mouth, Math.PI * 2 - mouth);
-      ctx.closePath();
+      drawPacmanPath(ctx, radius, mouth);
       ctx.fill();
 
-      if (remote) {
-        ctx.strokeStyle = "rgba(244, 248, 252, 0.76)";
-        ctx.lineWidth = Math.max(1, tileSize * 0.025);
-        ctx.stroke();
+      if (skin.metallic) {
+        drawMetallicSweep(ctx, radius, mouth, timeSeconds);
       }
 
+      drawElementAccent(ctx, radius, mouth, skin, timeSeconds);
+      drawSparkles(ctx, radius, skin, timeSeconds);
+
       ctx.shadowBlur = 0;
-      ctx.fillStyle = remote ? "#1d232a" : "#1a1300";
+      ctx.fillStyle = "#1a1300";
       ctx.beginPath();
       ctx.arc(radius * 0.13, -radius * 0.48, radius * 0.12, 0, Math.PI * 2);
       ctx.fill();
@@ -143,14 +256,13 @@
         ctx.textBaseline = "bottom";
         ctx.lineJoin = "round";
         ctx.lineWidth = Math.max(2, tileSize * 0.055);
-        ctx.strokeStyle = "rgba(5, 8, 11, 0.86)";
+        ctx.strokeStyle = "rgba(5, 8, 11, 0.88)";
         ctx.strokeText(options.label, cx, cy - radius - tileSize * 0.13);
-        ctx.fillStyle = "#e3e8ee";
+        ctx.fillStyle = skin.labelColor || "#f2df9d";
         ctx.fillText(options.label, cx, cy - radius - tileSize * 0.13);
         ctx.restore();
       }
     }
-
   }
 
   window.Pacman = Pacman;

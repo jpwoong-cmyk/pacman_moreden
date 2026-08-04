@@ -17,6 +17,7 @@
       this.hasNetworkState = false;
       this.alive = true;
       this.score = 0;
+      this.skinState = null;
     }
 
     updateMember(member) {
@@ -47,6 +48,10 @@
         y: Number(payload.dirY) || 0
       };
 
+      if (payload.skin && typeof payload.skin === "object") {
+        this.skinState = payload.skin;
+      }
+
       if (
         !this.hasNetworkState ||
         Math.hypot(this.pacman.x - x, this.pacman.y - y) > 3
@@ -64,11 +69,15 @@
       this.alive = playerState.alive !== false;
       this.score = Math.max(0, Number(playerState.score) || 0);
 
+      if (playerState.skin && typeof playerState.skin === "object") {
+        this.skinState = playerState.skin;
+      }
+
       /*
-      * World snapshots provide a starting position for newly discovered
-      * players. Once direct player-state updates are arriving, do not let an
-      * older world snapshot overwrite the live movement target.
-      */
+       * World snapshots provide a starting position for newly discovered
+       * players. Once direct player-state updates are arriving, do not let an
+       * older world snapshot overwrite the live movement target.
+       */
       if (this.hasNetworkState) return;
 
       const x = Number(playerState.x);
@@ -141,7 +150,8 @@
         angle: this.pacman.angle,
         radius: this.pacman.radius,
         alive: this.alive,
-        score: this.score
+        score: this.score,
+        skin: this.skinState
       };
     }
 
@@ -150,7 +160,9 @@
 
       this.pacman.draw(ctx, viewport, {
         variant: "remote",
-        label: this.accountName
+        label: this.accountName,
+        accountName: this.accountName,
+        skin: this.skinState
       });
     }
   }
