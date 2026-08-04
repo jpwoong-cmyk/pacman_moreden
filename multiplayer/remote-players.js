@@ -18,6 +18,7 @@
       this.alive = true;
       this.score = 0;
       this.skinState = null;
+      this.nearMissState = null;
     }
 
     updateMember(member) {
@@ -52,6 +53,14 @@
         this.skinState = payload.skin;
       }
 
+      if (payload.nearMiss && typeof payload.nearMiss === "object") {
+        this.nearMissState = payload.nearMiss;
+        window.PacmanNearMiss?.observeNetworkState?.(
+          this.userId,
+          this.nearMissState
+        );
+      }
+
       if (
         !this.hasNetworkState ||
         Math.hypot(this.pacman.x - x, this.pacman.y - y) > 3
@@ -71,6 +80,14 @@
 
       if (playerState.skin && typeof playerState.skin === "object") {
         this.skinState = playerState.skin;
+      }
+
+      if (playerState.nearMiss && typeof playerState.nearMiss === "object") {
+        this.nearMissState = playerState.nearMiss;
+        window.PacmanNearMiss?.observeNetworkState?.(
+          this.userId,
+          this.nearMissState
+        );
       }
 
       /*
@@ -151,7 +168,12 @@
         radius: this.pacman.radius,
         alive: this.alive,
         score: this.score,
-        skin: this.skinState
+        skin: this.skinState,
+        nearMiss:
+          window.PacmanNearMiss?.getNetworkStateForUser?.(
+            this.userId,
+            this.nearMissState
+          ) || this.nearMissState
       };
     }
 
@@ -162,7 +184,9 @@
         variant: "remote",
         label: this.accountName,
         accountName: this.accountName,
-        skin: this.skinState
+        userId: this.userId,
+        skin: this.skinState,
+        nearMiss: this.nearMissState
       });
     }
   }

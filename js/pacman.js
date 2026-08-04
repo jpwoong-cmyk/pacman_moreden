@@ -123,6 +123,112 @@
     ctx.restore();
   }
 
+
+  function wakeColour(skin) {
+    return skin.accentLight || skin.light || "#fff1ad";
+  }
+
+  function drawPhantomWake(
+    ctx,
+    radius,
+    skin,
+    nearMiss,
+    timeSeconds,
+    moving
+  ) {
+    if (!moving || !nearMiss || nearMiss.wakeCount <= 0) return;
+
+    const count = Math.max(1, Math.min(3, Number(nearMiss.wakeCount) || 0));
+    const colour = wakeColour(skin);
+    const reduced = Boolean(nearMiss.reducedMotion);
+    const motion = reduced ? 0 : Math.sin(timeSeconds * 7.2) * radius * 0.035;
+    const masteryBoost = Math.min(
+      0.22,
+      Math.max(0, Number(nearMiss.masteryLevel) || 0) * 0.035
+    );
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.strokeStyle = colour;
+    ctx.shadowColor = skin.glow || colour;
+    ctx.shadowBlur = nearMiss.luminous
+      ? radius * (0.56 + masteryBoost)
+      : radius * 0.22;
+
+    for (let index = 0; index < count; index += 1) {
+      const scale = Math.max(0.34, 0.67 - index * 0.1);
+      const distance = radius * (1.35 + index * 0.62);
+      const drift = reduced
+        ? 0
+        : Math.sin(timeSeconds * 5.4 + index * 1.7) * radius * 0.1;
+
+      ctx.globalAlpha =
+        Math.max(0.1, 0.32 - index * 0.075) +
+        (nearMiss.luminous ? 0.08 : 0) +
+        masteryBoost;
+      ctx.lineWidth = Math.max(1, radius * (0.09 - index * 0.012));
+      ctx.beginPath();
+      ctx.arc(
+        -distance + motion,
+        drift,
+        radius * scale,
+        0.46,
+        Math.PI * 2 - 0.46
+      );
+      ctx.stroke();
+    }
+
+    if (nearMiss.afterimage) {
+      const pulse = reduced
+        ? 0.13
+        : 0.08 + (Math.sin(timeSeconds * 2.3) + 1) * 0.045;
+      const afterDistance = radius * (3.2 + Math.min(0.4, masteryBoost));
+
+      ctx.globalAlpha = pulse + masteryBoost * 0.42;
+      ctx.fillStyle = colour;
+      ctx.translate(-afterDistance, 0);
+      drawPacmanPath(ctx, radius * 0.48, 0.33);
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+
+  function drawNearMissImpact(ctx, radius, skin, nearMiss) {
+    if (!nearMiss?.impact || !(nearMiss.flash > 0)) return;
+
+    const flash = Math.max(0, Math.min(1, Number(nearMiss.flash) || 0));
+    const side = Number(nearMiss.side) < 0 ? -1 : 1;
+    const colour = wakeColour(skin);
+    const x = -radius * 0.2;
+    const y = side * radius * 1.22;
+    const length = radius * (0.4 + flash * 0.38);
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = flash * 0.82;
+    ctx.strokeStyle = colour;
+    ctx.fillStyle = colour;
+    ctx.shadowColor = skin.glow || colour;
+    ctx.shadowBlur = radius * 0.7;
+    ctx.lineCap = "round";
+    ctx.lineWidth = Math.max(1.1, radius * 0.075);
+
+    ctx.beginPath();
+    ctx.moveTo(x - length, y);
+    ctx.lineTo(x + length, y);
+    ctx.moveTo(x, y - length * 0.55);
+    ctx.lineTo(x, y + length * 0.55);
+    ctx.stroke();
+
+    ctx.globalAlpha = flash * 0.42;
+    ctx.beginPath();
+    ctx.arc(x, y, radius * (0.08 + flash * 0.08), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
   class Pacman {
     constructor(startTile) {
       this.speed = 5.8;
@@ -205,10 +311,21 @@
       const skin =
         window.PacmanSkins?.resolveDrawSkin?.(options) ||
         fallbackSkin(remote);
+      const nearMiss =
+        window.PacmanNearMiss?.resolveDrawState?.(options) || null;
 
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate(this.angle);
+
+      drawPhantomWake(
+        ctx,
+        radius,
+        skin,
+        nearMiss,
+        timeSeconds,
+        moving
+      );
 
       ctx.shadowColor = skin.glow;
       ctx.shadowBlur = tileSize * (skin.metallic ? 0.34 : 0.24);
@@ -235,6 +352,7 @@
 
       drawElementAccent(ctx, radius, mouth, skin, timeSeconds);
       drawSparkles(ctx, radius, skin, timeSeconds);
+      drawNearMissImpact(ctx, radius, skin, nearMiss);
 
       ctx.shadowBlur = 0;
       ctx.fillStyle = "#1a1300";

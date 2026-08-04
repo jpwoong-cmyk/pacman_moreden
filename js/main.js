@@ -9,7 +9,7 @@
   const BASE_PACMAN_SPEED = 5.8;
   const RUSH_SPEED_MULTIPLIER = 1.25;
   const RUSH_SECONDS_PER_PILL = 8;
-  const POWERUP_SPAWN_INTERVAL = 25;
+  const POWERUP_SPAWN_INTERVAL = 12.5;
   const SHIELD_GRACE_SECONDS = 1.25;
   const HUNTER_GRACE_SECONDS = 0.85;
   const RESPAWN_GRACE_SECONDS = 1.5;
@@ -275,6 +275,7 @@
 
     window.PacmanPowerUpsUI?.showRoundOver(localScore());
     window.PacmanAudio?.playGameOver();
+    window.PacmanSkins?.endRound?.();
 
     if (window.PacmanLeaderboard) {
       void window.PacmanLeaderboard
@@ -354,6 +355,7 @@
 
     if (!state.localCaught) return;
     state.localCaught = false;
+    window.PacmanSkins?.startRound?.();
 
     const rememberedDeathState =
       state.deathPositions.get(state.currentUserId);
@@ -415,7 +417,9 @@
       dirY: Number(actor.dir?.y) || 0,
       angle: Number(actor.angle) || 0,
       alive: state.alive.get(actor.userId) !== false,
-      score: Math.max(0, Number(state.scores.get(actor.userId)) || 0)
+      score: Math.max(0, Number(state.scores.get(actor.userId)) || 0),
+      skin: actor.skin || null,
+      nearMiss: actor.nearMiss || null
     }));
   }
 
@@ -429,7 +433,9 @@
       angle: state.pacman.angle,
       radius: state.pacman.radius,
       alive: localAlive(),
-      score: localScore()
+      score: localScore(),
+      skin: window.PacmanSkins?.getLocalNetworkSkin?.() || null,
+      nearMiss: window.PacmanNearMiss?.getLocalNetworkState?.() || null
     };
   }
 
@@ -782,6 +788,7 @@
     state.lastBroadcastDirX = 0;
     state.lastBroadcastDirY = 0;
     state.lastTime = performance.now();
+    window.PacmanSkins?.startRound?.();
 
     createGameObjects(state.mapSeed, true);
     state.scores = new Map();
@@ -858,6 +865,8 @@
       dirX: state.pacman.dir.x,
       dirY: state.pacman.dir.y,
       angle: Number(state.pacman.angle.toFixed(4)),
+      skin: window.PacmanSkins?.getLocalNetworkSkin?.() || null,
+      nearMiss: window.PacmanNearMiss?.getLocalNetworkState?.() || null,
       sentAt: Date.now()
     });
 
@@ -1042,9 +1051,15 @@
         const score = Math.max(0, Number(state.scores.get(actor.userId)) || 0) + 100;
         state.scores.set(actor.userId, score);
 
+        window.PacmanSkins?.recordElementGhost?.(
+          actor.userId,
+          creep.element
+        );
+
         window.PacmanWorldSync.sendEvent({
           type: "ghost-eaten",
           creepId: creep.id,
+          element: creep.element,
           userId: actor.userId,
           score,
           powers: normalisePowerState(powers)
@@ -1230,7 +1245,7 @@
     state.spawnTimer -= dt;
     if (state.spawnTimer <= 0) {
       const exclusions = [...actors, ...state.map.spawnTiles, ...state.creeps.creeps];
-      const pellets = state.pellets.spawn(5, exclusions);
+      const pellets = state.pellets.spawn(10, exclusions);
       state.pellets.drainRemovals();
       state.creeps.spawnCornerWave();
       state.spawnTimer += 10;
@@ -1332,6 +1347,7 @@
   function updateHud() {
     roomValue.textContent = state.roomId;
     scoreValue.textContent = String(localScore());
+    window.PacmanSkins?.previewRoundScore?.(localScore());
     pelletValue.textContent = String(state.pellets ? state.pellets.count : 0);
     creepValue.textContent = String(state.creeps ? state.creeps.count : 0);
     alertValue.textContent = String(state.creeps ? state.creeps.alertedCount : 0);
