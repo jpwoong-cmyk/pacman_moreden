@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="css/season-update.css">
   <link rel="stylesheet" href="css/lobby-puppy.css">
   <link rel="stylesheet" href="css/coop-mode.css">
+  <link rel="stylesheet" href="css/guest-mode.css">
 </head>
 <body>
   <section id="lobbyScreen" class="lobby-screen" aria-labelledby="lobbyTitle">
@@ -83,10 +84,39 @@
       </p>
 
       <section id="authView" class="lobby-view" aria-label="Account access">
-        <div id="authChoice" class="lobby-choice">
-          <button id="showCreateAccountButton" class="gold-3d-button" type="button">Create Account</button>
-          <button id="showLoginButton" class="gold-3d-button" type="button">Log In</button>
-        </div>
+  <div id="authChoice" class="lobby-choice">
+    <button id="showCreateAccountButton" class="gold-3d-button" type="button">Create Account</button>
+    <button id="showLoginButton" class="gold-3d-button" type="button">Log In</button>
+
+    <div class="guest-access">
+      <button id="playAsGuestButton" class="guest-mode-button" type="button">
+        Play as Guest
+      </button>
+
+      <details class="account-mode-details">
+        <summary>What is Account Mode?</summary>
+
+        <ul class="account-mode-features">
+          <li>
+            <span aria-hidden="true">🏆</span>
+            <span><strong>Leaderboards</strong><br>Save and compete for city records.</span>
+          </li>
+          <li>
+            <span aria-hidden="true">👥</span>
+            <span><strong>Multiplayer</strong><br>Create or join online game rooms.</span>
+          </li>
+          <li>
+            <span aria-hidden="true">⚔️</span>
+            <span><strong>Coop / Versus</strong><br>Race together or challenge other players.</span>
+          </li>
+          <li>
+            <span aria-hidden="true">🎨</span>
+            <span><strong>Cosmetics</strong><br>Future account customisation and unlocks.</span>
+          </li>
+        </ul>
+      </details>
+    </div>
+  </div>
 
         <form id="createAccountForm" class="account-form room-panel" hidden novalidate>
           <h2>Create Account</h2>
@@ -272,6 +302,7 @@
   <script src="js/lobby-creeps.js"></script>
   <script src="js/main.js"></script>
   <script src="js/lobby.js"></script>
+  <script src="js/guest-mode.js"></script>
   <script src="js/coop-mode.js"></script>
   <script src="js/mobile-viewport.js"></script>
   <script src="js/mobile-joystick.js"></script>

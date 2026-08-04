@@ -1,0 +1,120 @@
+.guest-access {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.guest-mode-button {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(255, 216, 75, 0.52);
+  border-radius: 6px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(35, 39, 43, 0.96),
+      rgba(12, 14, 17, 0.98)
+    );
+  color: #ffe68a;
+  font: inherit;
+  font-weight: 800;
+  letter-spacing: 0.045em;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 4px 0 rgba(0, 0, 0, 0.46);
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.guest-mode-button:hover {
+  border-color: #ffe47a;
+  color: #fff3b6;
+  transform: translateY(-1px);
+}
+
+.guest-mode-button:active {
+  transform: translateY(2px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 0 rgba(0, 0, 0, 0.48);
+}
+
+.guest-mode-button:focus-visible,
+.account-mode-details summary:focus-visible {
+  outline: 3px solid rgba(255, 218, 76, 0.42);
+  outline-offset: 3px;
+}
+
+.account-mode-details {
+  border-top: 1px solid rgba(255, 255, 255, 0.09);
+  padding-top: 10px;
+}
+
+.account-mode-details summary {
+  color: rgba(238, 241, 245, 0.76);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 750;
+  letter-spacing: 0.035em;
+  list-style-position: inside;
+  text-align: center;
+}
+
+.account-mode-details[open] summary {
+  color: #ffe68a;
+}
+
+.account-mode-features {
+  display: grid;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 220, 92, 0.22);
+  border-radius: 6px;
+  background: rgba(6, 8, 10, 0.55);
+  list-style: none;
+}
+
+.account-mode-features li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 8px;
+  align-items: start;
+  color: rgba(244, 246, 248, 0.82);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.account-mode-features strong {
+  color: #ffe68a;
+}
+
+.round-result__note--guest {
+  white-space: pre-line;
+  line-height: 1.45;
+}
+
+.guest-mode-active #latencyValue,
+.guest-mode-active #coopTeamHud {
+  display: none !important;
+}
+
+@media (max-width: 620px) {
+  .guest-mode-button {
+    min-height: 42px;
+    font-size: 0.86rem;
+  }
+
+  .account-mode-features {
+    padding: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guest-mode-button {
+    transition: none;
+  }
+}
