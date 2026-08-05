@@ -67,8 +67,16 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     coinBody: null,
     coinFace: null,
     coinRim: null,
+    coinGlow: null,
     coinDummy: new THREE.Object3D(),
+    coinGlowDummy: new THREE.Object3D(),
+    coinMaterials: null,
+    coinGlowMaterial: null,
     coinCount: 0,
+    softGlowTexture: null,
+    lampPoolMaterial: null,
+    lampHaloMaterial: null,
+    nightHorizon: null,
     seasonPoints: null,
     seasonPositions: null,
     seasonSeeds: [],
@@ -192,20 +200,21 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   function disposeObject(object) {
     if (!object) return;
 
+    const disposeMaterial = (material) => {
+      if (!material) return;
+      if (material.userData?.pacPersistentShared) return;
+      if (Array.from(state.materialCache.values()).includes(material)) return;
+      material.map?.dispose?.();
+      material.dispose?.();
+    };
+
     object.traverse?.((child) => {
       child.geometry?.dispose?.();
 
       if (Array.isArray(child.material)) {
-        child.material.forEach((material) => {
-          material?.map?.dispose?.();
-          material?.dispose?.();
-        });
-      } else if (
-        child.material &&
-        !Array.from(state.materialCache.values()).includes(child.material)
-      ) {
-        child.material.map?.dispose?.();
-        child.material.dispose?.();
+        child.material.forEach(disposeMaterial);
+      } else {
+        disposeMaterial(child.material);
       }
     });
 
@@ -531,6 +540,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     state.sunLight.position.set(20, 30, 12);
     state.lights.add(state.ambientLight, state.sunLight);
 
+    createNightHorizon();
     createSeasonParticles();
     createWeatherRain();
     resizeRenderer();
@@ -877,6 +887,122 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     return texture;
   }
 
+  function getSoftGlowTexture() {
+    if (state.softGlowTexture) return state.softGlowTexture;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const context = canvas.getContext("2d");
+    const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
+    gradient.addColorStop(0, "rgba(255,255,255,0.96)");
+    gradient.addColorStop(0.18, "rgba(255,255,255,0.62)");
+    gradient.addColorStop(0.48, "rgba(255,255,255,0.22)");
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    state.softGlowTexture = texture;
+    return texture;
+  }
+
+  function getLampPoolMaterial() {
+    if (state.lampPoolMaterial) return state.lampPoolMaterial;
+
+    const material = new THREE.MeshBasicMaterial({
+      map: getSoftGlowTexture(),
+      color: 0xffcf78,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      toneMapped: false
+    });
+    material.userData.pacPersistentShared = true;
+    state.lampPoolMaterial = material;
+    return material;
+  }
+
+  function getLampHaloMaterial() {
+    if (state.lampHaloMaterial) return state.lampHaloMaterial;
+
+    const material = new THREE.SpriteMaterial({
+      map: getSoftGlowTexture(),
+      color: 0xffd98b,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false
+    });
+    material.userData.pacPersistentShared = true;
+    state.lampHaloMaterial = material;
+    return material;
+  }
+
+  function getCoinGlowMaterial() {
+    if (state.coinGlowMaterial) return state.coinGlowMaterial;
+
+    const material = new THREE.MeshBasicMaterial({
+      map: getSoftGlowTexture(),
+      color: 0xffc84d,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      toneMapped: false
+    });
+    material.userData.pacPersistentShared = true;
+    state.coinGlowMaterial = material;
+    return material;
+  }
+
+  function createNightHorizonTexture() {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 128;
+    const context = canvas.getContext("2d");
+    const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
+    gradient.addColorStop(0, "rgba(39,66,104,0)");
+    gradient.addColorStop(0.38, "rgba(61,93,139,0.12)");
+    gradient.addColorStop(0.72, "rgba(102,122,156,0.2)");
+    gradient.addColorStop(0.9, "rgba(203,139,82,0.12)");
+    gradient.addColorStop(1, "rgba(238,167,89,0)");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    return texture;
+  }
+
+  function createNightHorizon() {
+    const material = new THREE.MeshBasicMaterial({
+      map: createNightHorizonTexture(),
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      fog: false,
+      side: THREE.DoubleSide,
+      toneMapped: false
+    });
+    const horizon = new THREE.Mesh(
+      new THREE.PlaneGeometry(92, 18),
+      material
+    );
+    horizon.position.set(0, 7.5, -42);
+    horizon.frustumCulled = false;
+    state.nightHorizon = horizon;
+    state.scene.add(horizon);
+  }
+
   function addBuildingLabel(group, text, x, y, z, width, accent) {
     const texture = createLabelTexture(text, "#fff8dc", accent || "#303a42");
     const material = new THREE.MeshBasicMaterial({
@@ -915,6 +1041,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       })
     );
     door.position.set(x, y, z + 0.035);
+    door.userData.isDoorGlass = true;
     group.add(door);
   }
 
@@ -1024,6 +1151,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       0.45,
       centre.z + depth * 0.5 + 0.045
     );
+    display.userData.isShopfront = true;
     group.add(display);
 
     addFrontDoor(
@@ -1091,6 +1219,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       height * 0.42,
       centre.z + depth * 0.5 + 0.14
     );
+    atrium.userData.isMallGlass = true;
     group.add(atrium);
 
     const canopy = new THREE.Mesh(
@@ -1135,6 +1264,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       })
     );
     rooftopLogo.position.set(centre.x, height + 0.62, centre.z);
+    rooftopLogo.userData.isBuildingSign = true;
     group.add(rooftopLogo);
 
     addFrontDoor(
@@ -1438,12 +1568,37 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       roughness: 0.72,
       metalness: 0.08
     });
-    const glassMaterial = cachedMaterial(`building-glass-${index}`, glassColor, {
-      emissive: glassColor,
-      emissiveIntensity: 0.3,
-      roughness: 0.25,
-      metalness: 0.1
-    });
+    const litWindowColor = kind === "housing"
+      ? 0xffd59b
+      : kind === "office"
+        ? 0x9edff5
+        : glassColor;
+    const darkWindowColor = new THREE.Color(glassColor)
+      .multiplyScalar(0.38)
+      .getHex();
+    const litWindowMaterial = cachedMaterial(
+      `building-window-lit-${index}`,
+      litWindowColor,
+      {
+        emissive: litWindowColor,
+        emissiveIntensity: 0.42,
+        roughness: 0.2,
+        metalness: 0.12
+      }
+    );
+    const darkWindowMaterial = cachedMaterial(
+      `building-window-dark-${index}`,
+      darkWindowColor,
+      {
+        emissive: darkWindowColor,
+        emissiveIntensity: 0.08,
+        roughness: 0.3,
+        metalness: 0.08
+      }
+    );
+    litWindowMaterial.userData.pacNightWindowBoost =
+      kind === "office" ? 1.35 : kind === "housing" ? 1.08 : 0.92;
+    darkWindowMaterial.userData.pacNightWindowBoost = 0.2;
     const signMaterial = cachedMaterial(`building-sign-${index}`, lot.accent || edgeColor, {
       emissive: lot.accent || edgeColor,
       emissiveIntensity: 0.32,
@@ -1474,11 +1629,22 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
         const wx = centre.x - width * 0.38 + column * (width * 0.76 / Math.max(1, windowColumns - 1));
         const wy = 0.55 + row * Math.max(0.38, (height - 0.75) / windowRows);
 
+        const windowSeed = seededValue(
+          index * 997 + row * 71 + column * 29 + 13
+        );
+        const litThreshold = kind === "office"
+          ? 0.42
+          : kind === "housing"
+            ? 0.5
+            : 0.46;
         const frontWindow = new THREE.Mesh(
           new THREE.BoxGeometry(windowWidth * 0.56, 0.16, 0.035),
-          glassMaterial
+          windowSeed > litThreshold
+            ? litWindowMaterial
+            : darkWindowMaterial
         );
         frontWindow.position.set(wx, wy, centre.z + depth * 0.5 + 0.02);
+        frontWindow.userData.isBuildingWindow = true;
         group.add(frontWindow);
       }
     }
@@ -1492,6 +1658,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       Math.min(height * 0.48, 1.35),
       centre.z + depth * 0.5 + 0.045
     );
+    sign.userData.isBuildingSign = true;
     group.add(sign);
 
     const rooftopUnits = Math.min(3, Math.max(0, Number(lot.rooftopUnits) || 0));
@@ -1512,10 +1679,32 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       group.add(box);
     }
 
-    if (["shop", "mall", "school"].includes(kind)) {
-      addFakeLamp(group, centre.x - width * 0.52, centre.z + depth * 0.52, lot.lightColor);
-      if (width > 2) {
-        addFakeLamp(group, centre.x + width * 0.52, centre.z + depth * 0.52, lot.lightColor);
+    const lampKinds = [
+      "shop",
+      "mall",
+      "school",
+      "housing",
+      "office",
+      "bigBuilding",
+      "smallBuilding"
+    ];
+    if (lampKinds.includes(kind)) {
+      addFakeLamp(
+        group,
+        centre.x - width * 0.5,
+        centre.z + depth * 0.52,
+        lot.lightColor
+      );
+      if (
+        width > 2.25 &&
+        ["mall", "office", "bigBuilding"].includes(kind)
+      ) {
+        addFakeLamp(
+          group,
+          centre.x + width * 0.5,
+          centre.z + depth * 0.52,
+          lot.lightColor
+        );
       }
     }
 
@@ -1712,6 +1901,13 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       snowCap.userData.isTreeSnow = true;
       group.add(snowCap);
     }
+
+    addFakeLamp(
+      group,
+      lot.x + 0.12,
+      lot.y + Math.max(0.15, lot.h - 0.18),
+      0xffd978
+    );
   }
 
   function addFakeLamp(group, x, z, color) {
@@ -1740,6 +1936,21 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     bulb.position.set(x, 0.82, z);
     bulb.userData.isLampBulb = true;
     group.add(bulb);
+
+    const halo = new THREE.Sprite(getLampHaloMaterial());
+    halo.position.set(x, 0.82, z);
+    halo.scale.set(0.52, 0.52, 1);
+    halo.userData.isLampHalo = true;
+    group.add(halo);
+
+    const pool = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.45, 0.82),
+      getLampPoolMaterial()
+    );
+    pool.rotation.x = -Math.PI / 2;
+    pool.position.set(x, 0.092, z + 0.17);
+    pool.userData.isLampPool = true;
+    group.add(pool);
   }
 
   function buildBuildings(map) {
@@ -2657,6 +2868,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     disposeObject(state.coinBody);
     disposeObject(state.coinFace);
     disposeObject(state.coinRim);
+    disposeObject(state.coinGlow);
 
     const bodyMaterial = new THREE.MeshStandardMaterial({
       color: 0xe6ad24,
@@ -2699,7 +2911,23 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       MAX_COINS
     );
 
-    [state.coinBody, state.coinFace, state.coinRim].forEach((mesh) => {
+    const glowMaterial = getCoinGlowMaterial();
+    const coinGlowGeometry = new THREE.PlaneGeometry(0.62, 0.62);
+    coinGlowGeometry.rotateX(-Math.PI / 2);
+    state.coinGlow = new THREE.InstancedMesh(
+      coinGlowGeometry,
+      glowMaterial,
+      MAX_COINS
+    );
+
+    state.coinMaterials = {
+      body: bodyMaterial,
+      face: faceMaterial,
+      rim: rimMaterial,
+      glow: glowMaterial
+    };
+
+    [state.coinBody, state.coinFace, state.coinRim, state.coinGlow].forEach((mesh) => {
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0;
       state.effects.add(mesh);
@@ -2711,6 +2939,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
     const pellets = Array.from(source.pellets.pellets.values()).slice(0, MAX_COINS);
     const dummy = state.coinDummy;
+    const glowDummy = state.coinGlowDummy;
 
     pellets.forEach((pellet, index) => {
       const phase = Number(pellet.phase) || index * 0.43;
@@ -2730,10 +2959,17 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       state.coinBody.setMatrixAt(index, dummy.matrix);
       state.coinFace.setMatrixAt(index, dummy.matrix);
       state.coinRim.setMatrixAt(index, dummy.matrix);
+
+      const haloPulse = 0.94 + Math.sin(time * 2.6 + phase) * 0.06;
+      glowDummy.position.set(pellet.x, 0.09, pellet.y);
+      glowDummy.rotation.set(0, 0, 0);
+      glowDummy.scale.set(haloPulse, haloPulse, 1);
+      glowDummy.updateMatrix();
+      state.coinGlow.setMatrixAt(index, glowDummy.matrix);
     });
 
     state.coinCount = pellets.length;
-    [state.coinBody, state.coinFace, state.coinRim].forEach((mesh) => {
+    [state.coinBody, state.coinFace, state.coinRim, state.coinGlow].forEach((mesh) => {
       mesh.count = state.coinCount;
       mesh.instanceMatrix.needsUpdate = true;
       mesh.computeBoundingSphere();
@@ -3166,7 +3402,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       autumn: new THREE.Color(0xb8896a),
       winter: new THREE.Color(0xa8bdc8)
     };
-    const nightSky = new THREE.Color(0x0b1320);
+    const nightSky = new THREE.Color(0x0d1a2a);
     const daySky = (skyBySeason[seasonId] || skyBySeason.spring).clone();
     daySky.lerp(new THREE.Color(0x78878d), overcast * 0.46);
     daySky.lerp(new THREE.Color(0xd0d7d4), mist * 0.18);
@@ -3174,35 +3410,58 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const sky = nightSky.clone().lerp(daySky, day);
 
     state.scene.background.copy(sky);
-    state.scene.fog.color.copy(
-      sky.clone().lerp(new THREE.Color(0xcbd5d3), mist * 0.42)
-    );
+    const fogColor = sky
+      .clone()
+      .lerp(new THREE.Color(0x243448), night * 0.18)
+      .lerp(new THREE.Color(0xcbd5d3), mist * 0.42);
+    state.scene.fog.color.copy(fogColor);
     state.scene.fog.near = Math.max(8, 18 + day * 8 - mist * 12 - rain * 4);
     state.scene.fog.far = Math.max(32, 55 + day * 28 - mist * 32 - rain * 9);
 
+    const nightAmbient = 0.78 + wet * 0.05 + snow * 0.08;
     state.ambientLight.intensity =
-      (0.55 + day * 1.05) * (1 - overcast * 0.18);
-    state.ambientLight.color.set(night > 0.5 ? 0x92aee2 : 0xc5e2ff);
+      (nightAmbient + day * 0.84) *
+      (1 - overcast * (0.08 + day * 0.08));
+    state.ambientLight.color.set(night > 0.5 ? 0x9db9e8 : 0xc5e2ff);
     state.ambientLight.groundColor.set(
-      seasonId === "winter" ? 0x65767b : 0x2c4027
+      seasonId === "winter"
+        ? 0x6d7e88
+        : night > 0.5
+          ? 0x263a42
+          : 0x2c4027
     );
 
-    state.sunLight.intensity =
-      (0.16 + day * 1.65) *
-      (1 - overcast * 0.48) *
-      (1 - rain * 0.22);
-    state.sunLight.color.set(
+    const daylightColor = new THREE.Color(
       seasonId === "autumn"
         ? 0xffc588
         : seasonId === "summer"
           ? 0xffe4a6
           : 0xfff0cf
     );
+    const moonlightColor = new THREE.Color(0x9fbee8);
+    state.sunLight.intensity =
+      (0.34 * night + 0.2 + day * 1.48) *
+      (1 - overcast * (0.2 + day * 0.28)) *
+      (1 - rain * 0.16);
+    state.sunLight.color.copy(moonlightColor.lerp(daylightColor, day));
     state.sunLight.position.set(
       18 + Math.sin(time * 0.05) * 5,
       25,
       10 + Math.cos(time * 0.05) * 5
     );
+    state.renderer.toneMappingExposure =
+      1.08 + night * 0.08 + wet * night * 0.04;
+
+    if (state.nightHorizon && source.localPacman) {
+      state.nightHorizon.visible = night > 0.01;
+      state.nightHorizon.material.opacity =
+        night * (0.26 + wet * 0.08 + mist * 0.05);
+      state.nightHorizon.position.set(
+        Number(source.localPacman.x) || 0,
+        7.4,
+        (Number(source.localPacman.y) || 0) - 42
+      );
+    }
 
     if (state.tileMaterials) {
       const palettes = {
@@ -3228,22 +3487,53 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
         }
       };
       const palette = palettes[seasonId] || palettes.spring;
-      const roadColor = new THREE.Color(palette.road).multiplyScalar(
-        1 - wet * 0.17
-      );
-      const walkwayColor = new THREE.Color(palette.walkway).multiplyScalar(
-        1 - wet * 0.08
-      );
+      const roadColor = new THREE.Color(palette.road)
+        .multiplyScalar(1 - wet * 0.17)
+        .lerp(new THREE.Color(0x2b3b48), night * 0.72);
+      const walkwayColor = new THREE.Color(palette.walkway)
+        .multiplyScalar(1 - wet * 0.08)
+        .lerp(new THREE.Color(0x596875), night * 0.72);
+      const grassColor = new THREE.Color(palette.grass)
+        .lerp(new THREE.Color(0x23392f), night * 0.72);
 
       state.tileMaterials.road.color.copy(roadColor);
       state.tileMaterials.walkway.color.copy(walkwayColor);
-      state.tileMaterials.grass.color.set(palette.grass);
+      state.tileMaterials.grass.color.copy(grassColor);
+      state.tileMaterials.road.emissive.set(0x132330);
+      state.tileMaterials.road.emissiveIntensity = night * (0.22 + wet * 0.06);
+      state.tileMaterials.walkway.emissive.set(0x1d2d39);
+      state.tileMaterials.walkway.emissiveIntensity = night * (0.18 + wet * 0.05);
+      state.tileMaterials.grass.emissive.set(0x0e1e18);
+      state.tileMaterials.grass.emissiveIntensity = night * 0.08;
+      state.tileMaterials.zebra.emissive.set(0x4b493d);
+      state.tileMaterials.zebra.emissiveIntensity = night * 0.18;
       state.tileMaterials.road.roughness = 0.9 - wet * 0.52;
       state.tileMaterials.road.metalness = 0.04 + wet * 0.13;
       state.tileMaterials.walkway.roughness = 0.93 - wet * 0.37;
       state.tileMaterials.walkway.metalness = 0.01 + wet * 0.08;
       state.tileMaterials.zebra.roughness = 0.82 - wet * 0.34;
       state.tileMaterials.zebra.metalness = wet * 0.07;
+    }
+
+    if (state.coinMaterials) {
+      const glint = Math.sin(time * 4.2) * 0.1;
+      state.coinMaterials.body.emissiveIntensity =
+        0.42 + night * 0.88 + wet * night * 0.08;
+      state.coinMaterials.face.emissiveIntensity =
+        0.36 + night * 1.22 + wet * night * 0.12;
+      state.coinMaterials.rim.emissiveIntensity =
+        0.4 + night * 1.52 + glint * night;
+      state.coinMaterials.glow.opacity =
+        night * (0.34 + wet * 0.22 + mist * 0.05);
+    }
+
+    if (state.lampPoolMaterial) {
+      state.lampPoolMaterial.opacity =
+        night * (0.28 + wet * 0.24 + mist * 0.04);
+    }
+    if (state.lampHaloMaterial) {
+      state.lampHaloMaterial.opacity =
+        night * (0.4 + wet * 0.16);
     }
 
     if (state.snowPatchMesh && state.snowPatchMaterial) {
@@ -3317,12 +3607,27 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
       if (!child.material) return;
       if (child.userData.isLampBulb) {
-        child.material.emissiveIntensity = 0.25 + night * 1.25 + wet * 0.12;
+        child.material.emissiveIntensity =
+          0.45 + night * 2.2 + wet * night * 0.3;
+      } else if (child.userData.isBuildingWindow) {
+        const boost = Number(child.material.userData.pacNightWindowBoost) || 0.2;
+        child.material.emissiveIntensity = 0.08 + night * boost;
+      } else if (child.userData.isShopfront) {
+        child.material.emissiveIntensity =
+          0.34 + night * 1.35 + wet * night * 0.16;
+      } else if (child.userData.isMallGlass) {
+        child.material.emissiveIntensity =
+          0.42 + night * 1.55 + wet * night * 0.18;
+      } else if (child.userData.isDoorGlass) {
+        child.material.emissiveIntensity = 0.24 + night * 0.86;
+      } else if (child.userData.isBuildingSign) {
+        child.material.emissiveIntensity =
+          0.32 + night * 1.05 + wet * night * 0.12;
       } else if (
         child.material.emissive &&
         child.material.emissive.getHex() !== 0
       ) {
-        child.material.emissiveIntensity = 0.18 + night * 0.62;
+        child.material.emissiveIntensity = 0.18 + night * 0.72;
       }
     });
 
