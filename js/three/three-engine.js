@@ -8,6 +8,11 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   const LOCAL_VISIBLE_GRACE_MS = 140;
   const CAMERA_LERP = 0.09;
   const MATERIAL_EPSILON = 0.0001;
+  const MAX_NEAR_MISS_SPARKLES = 24;
+  const PAC_DISSOLVE_SECONDS = 1.05;
+  const CRUMBLE_SECONDS = 0.82;
+  const CAMERA_NEAR_MISS_ZOOM = 0.05;
+  const CAMERA_NEAR_MISS_SECONDS = 0.72;
 
   const reducedMotionQuery = window.matchMedia(
     "(prefers-reduced-motion: reduce)"
@@ -73,6 +78,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     frameHandle: 0,
     resizeObserver: null,
     lastTime: performance.now() / 1000,
+    transientEffects: [],
+    cameraPulseAge: Number.POSITIVE_INFINITY,
+    lastLocalNearMissCount: null,
     stats: {
       calls: 0,
       triangles: 0
@@ -167,11 +175,15 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       child.geometry?.dispose?.();
 
       if (Array.isArray(child.material)) {
-        child.material.forEach((material) => material?.dispose?.());
+        child.material.forEach((material) => {
+          material?.map?.dispose?.();
+          material?.dispose?.();
+        });
       } else if (
         child.material &&
         !Array.from(state.materialCache.values()).includes(child.material)
       ) {
+        child.material.map?.dispose?.();
         child.material.dispose?.();
       }
     });
@@ -182,6 +194,188 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   function clearGroup(group) {
     if (!group) return;
     [...group.children].forEach((child) => disposeObject(child));
+  }
+
+
+  function collectMaterials(object) {
+    const materials = [];
+    const seen = new Set();
+
+    object?.traverse?.((child) => {
+      const list = Array.isArray(child.material)
+        ? child.material
+        : child.material
+          ? [child.material]
+          : [];
+
+      list.forEach((material) => {
+        if (!material || seen.has(material)) return;
+        seen.add(material);
+        materials.push(material);
+      });
+    });
+
+    return materials;
+  }
+
+  function rememberFadeMaterials(actor) {
+    if (!actor || actor.userData.fadeRecords) return;
+    actor.userData.fadeRecords = collectMaterials(actor).map((material) => ({
+      material,
+      opacity: Number.isFinite(Number(material.opacity)) ? material.opacity : 1,
+      transparent: Boolean(material.transparent),
+      depthWrite: material.depthWrite !== false
+    }));
+  }
+
+  function setActorOpacity(actor, alpha) {
+    rememberFadeMaterials(actor);
+    const safeAlpha = clamp(alpha, 0, 1);
+
+    actor.userData.fadeRecords.forEach((record) => {
+      record.material.transparent = true;
+      record.material.opacity = record.opacity * safeAlpha;
+      record.material.depthWrite = safeAlpha > 0.72 && record.depthWrite;
+      record.material.needsUpdate = true;
+    });
+  }
+
+  function restoreActorOpacity(actor) {
+    rememberFadeMaterials(actor);
+
+    actor.userData.fadeRecords.forEach((record) => {
+      record.material.opacity = record.opacity;
+      record.material.transparent = record.transparent;
+      record.material.depthWrite = record.depthWrite;
+      record.material.needsUpdate = true;
+    });
+  }
+
+  function createTransientBurst(position, options = {}) {
+    if (!state.effects || !position) return null;
+
+    const count = Math.max(1, Math.floor(Number(options.count) || 12));
+    const duration = Math.max(0.2, Number(options.duration) || 0.8);
+    const color = colorValue(options.color, 0xffffff);
+    const shape = options.shape || "cube";
+    const baseSize = Math.max(0.012, Number(options.baseSize) || 0.055);
+    const geometry = shape === "sparkle"
+      ? new THREE.OctahedronGeometry(baseSize, 0)
+      : new THREE.BoxGeometry(baseSize, baseSize, baseSize);
+    const material = new THREE.MeshStandardMaterial({
+      color,
+      emissive: color.clone().multiplyScalar(options.emissive ?? 0.48),
+      emissiveIntensity: options.emissiveIntensity ?? 0.75,
+      metalness: options.metalness ?? 0.28,
+      roughness: options.roughness ?? 0.42,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false
+    });
+
+    const group = new THREE.Group();
+    group.position.copy(position);
+    const particles = [];
+    const speed = Math.max(0.1, Number(options.speed) || 1.15);
+    const upward = Number(options.upward) || 0.65;
+    const spread = Number(options.spread) || 0.9;
+
+    for (let index = 0; index < count; index += 1) {
+      const mesh = new THREE.Mesh(geometry, material);
+      const angle = Math.random() * Math.PI * 2;
+      const radial = (0.35 + Math.random() * 0.65) * speed;
+      mesh.position.set(
+        (Math.random() - 0.5) * 0.18,
+        (Math.random() - 0.5) * 0.18,
+        (Math.random() - 0.5) * 0.18
+      );
+      mesh.scale.setScalar(0.65 + Math.random() * 0.9);
+      group.add(mesh);
+      particles.push({
+        mesh,
+        velocity: new THREE.Vector3(
+          Math.cos(angle) * radial * spread,
+          upward * (0.45 + Math.random() * 0.9),
+          Math.sin(angle) * radial * spread
+        ),
+        spin: new THREE.Vector3(
+          (Math.random() - 0.5) * 8,
+          (Math.random() - 0.5) * 8,
+          (Math.random() - 0.5) * 8
+        )
+      });
+    }
+
+    state.effects.add(group);
+    const effect = {
+      group,
+      particles,
+      material,
+      age: 0,
+      duration,
+      gravity: Number(options.gravity) || 1.4
+    };
+    state.transientEffects.push(effect);
+    return effect;
+  }
+
+  function updateTransientEffects(dt) {
+    state.transientEffects = state.transientEffects.filter((effect) => {
+      effect.age += dt;
+      const progress = clamp(effect.age / effect.duration, 0, 1);
+
+      effect.particles.forEach((particle) => {
+        particle.velocity.y -= effect.gravity * dt;
+        particle.mesh.position.addScaledVector(particle.velocity, dt);
+        particle.mesh.rotation.x += particle.spin.x * dt;
+        particle.mesh.rotation.y += particle.spin.y * dt;
+        particle.mesh.rotation.z += particle.spin.z * dt;
+        particle.mesh.scale.multiplyScalar(1 - dt * 0.48);
+      });
+
+      effect.material.opacity = Math.pow(1 - progress, 1.4);
+      if (progress < 1) return true;
+
+      disposeObject(effect.group);
+      return false;
+    });
+  }
+
+  function spawnPacDissolve(actor, skin) {
+    const color = skin?.accentLight || skin?.light || skin?.mid || 0xffdd66;
+    createTransientBurst(actor.position.clone(), {
+      color,
+      count: reducedMotionQuery.matches ? 10 : 20,
+      duration: PAC_DISSOLVE_SECONDS,
+      shape: "sparkle",
+      baseSize: 0.045,
+      speed: 0.92,
+      upward: 0.82,
+      gravity: 0.78,
+      metalness: skin?.metallic ? 0.78 : 0.32,
+      roughness: 0.28,
+      emissive: 0.62,
+      emissiveIntensity: 0.92
+    });
+  }
+
+  function spawnGhostCrumble(actor) {
+    if (!actor?.visible) return;
+    const color = actor.userData.bodyMaterial?.color || new THREE.Color(0xbfc7d0);
+    createTransientBurst(actor.position.clone(), {
+      color,
+      count: reducedMotionQuery.matches ? 9 : actor.userData.isPuppy ? 15 : 19,
+      duration: CRUMBLE_SECONDS,
+      shape: "cube",
+      baseSize: actor.userData.isPuppy ? 0.07 : 0.075,
+      speed: actor.userData.isPuppy ? 0.9 : 1.18,
+      upward: 0.72,
+      gravity: 1.8,
+      metalness: actor.userData.isPuppy ? 0.66 : 0.12,
+      roughness: actor.userData.isPuppy ? 0.28 : 0.52,
+      emissive: 0.45,
+      emissiveIntensity: 0.76
+    });
   }
 
   function shouldUseThree() {
@@ -472,6 +666,404 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     state.buildings.add(group);
   }
 
+
+  function createLabelTexture(text, foreground = "#f7f3dc", background = "#28323a") {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 64;
+    const context = canvas.getContext("2d");
+    context.fillStyle = background;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.strokeStyle = "rgba(255,255,255,0.38)";
+    context.lineWidth = 4;
+    context.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
+    context.fillStyle = foreground;
+    context.font = "700 27px system-ui, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    const clean = String(text || "P.A.C CITY").toUpperCase().slice(0, 22);
+    context.fillText(clean, canvas.width / 2, canvas.height / 2 + 1);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.minFilter = THREE.LinearFilter;
+    return texture;
+  }
+
+  function addBuildingLabel(group, text, x, y, z, width, accent) {
+    const texture = createLabelTexture(text, "#fff8dc", accent || "#303a42");
+    const material = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      side: THREE.DoubleSide,
+      toneMapped: false
+    });
+    const label = new THREE.Mesh(
+      new THREE.PlaneGeometry(width, Math.max(0.18, width * 0.24)),
+      material
+    );
+    label.position.set(x, y, z);
+    group.add(label);
+    return label;
+  }
+
+  function addFrontDoor(group, x, y, z, width = 0.28, height = 0.55) {
+    const frame = new THREE.Mesh(
+      new THREE.BoxGeometry(width + 0.08, height + 0.08, 0.05),
+      cachedMaterial("door-frame", 0x313940, {
+        metalness: 0.28,
+        roughness: 0.46
+      })
+    );
+    frame.position.set(x, y, z);
+    group.add(frame);
+
+    const door = new THREE.Mesh(
+      new THREE.BoxGeometry(width, height, 0.06),
+      cachedMaterial("door-glass", 0x78a9ba, {
+        emissive: 0x284d59,
+        emissiveIntensity: 0.28,
+        metalness: 0.18,
+        roughness: 0.22
+      })
+    );
+    door.position.set(x, y, z + 0.035);
+    group.add(door);
+  }
+
+  function addAwning(group, x, y, z, width, depth, accent, index) {
+    const material = cachedMaterial(`awning-${index}`, accent || 0xd85f4f, {
+      emissive: accent || 0xd85f4f,
+      emissiveIntensity: 0.12,
+      roughness: 0.62
+    });
+    const awning = new THREE.Mesh(
+      new THREE.BoxGeometry(width, 0.09, depth),
+      material
+    );
+    awning.position.set(x, y, z);
+    awning.rotation.x = -0.08;
+    group.add(awning);
+  }
+
+  function addHousingDetails(group, lot, centre, width, depth, height, index) {
+    const balconyMaterial = cachedMaterial(`housing-balcony-${index}`, 0xa9b0b2, {
+      roughness: 0.8,
+      metalness: 0.08
+    });
+    const railMaterial = cachedMaterial(`housing-rail-${index}`, 0x4f5960, {
+      roughness: 0.5,
+      metalness: 0.3
+    });
+    const levels = height > 2.2 ? 3 : 2;
+
+    for (let level = 0; level < levels; level += 1) {
+      const y = 0.75 + level * 0.52;
+      const balcony = new THREE.Mesh(
+        new THREE.BoxGeometry(width * 0.72, 0.07, 0.2),
+        balconyMaterial
+      );
+      balcony.position.set(centre.x, y, centre.z + depth * 0.5 + 0.1);
+      group.add(balcony);
+
+      const rail = new THREE.Mesh(
+        new THREE.BoxGeometry(width * 0.72, 0.035, 0.035),
+        railMaterial
+      );
+      rail.position.set(centre.x, y + 0.18, centre.z + depth * 0.5 + 0.19);
+      group.add(rail);
+
+      for (let post = -2; post <= 2; post += 1) {
+        const upright = new THREE.Mesh(
+          new THREE.BoxGeometry(0.025, 0.22, 0.025),
+          railMaterial
+        );
+        upright.position.set(
+          centre.x + post * width * 0.14,
+          y + 0.1,
+          centre.z + depth * 0.5 + 0.19
+        );
+        group.add(upright);
+      }
+
+      if (level % 2 === 0) {
+        const ac = new THREE.Mesh(
+          new THREE.BoxGeometry(0.23, 0.15, 0.09),
+          cachedMaterial(`housing-ac-${index}`, 0xd6dad8, { roughness: 0.76 })
+        );
+        ac.position.set(
+          centre.x + width * 0.31,
+          y + 0.08,
+          centre.z + depth * 0.5 + 0.08
+        );
+        group.add(ac);
+      }
+    }
+
+    const waterTank = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.18, 0.18, 0.28, 12),
+      cachedMaterial(`housing-tank-${index}`, 0x65777f, {
+        roughness: 0.58,
+        metalness: 0.22
+      })
+    );
+    waterTank.position.set(centre.x - width * 0.24, height + 0.38, centre.z);
+    group.add(waterTank);
+
+    addBuildingLabel(
+      group,
+      lot.sign || "CITY HOMES",
+      centre.x,
+      0.42,
+      centre.z + depth * 0.5 + 0.065,
+      Math.min(1.35, width * 0.58),
+      "#43565d"
+    );
+  }
+
+  function addShopDetails(group, lot, centre, width, depth, height, index) {
+    const glass = cachedMaterial(`shop-glass-${index}`, 0x80c8d7, {
+      emissive: 0x2b6875,
+      emissiveIntensity: 0.38,
+      roughness: 0.18,
+      metalness: 0.16
+    });
+    const display = new THREE.Mesh(
+      new THREE.BoxGeometry(width * 0.72, 0.48, 0.055),
+      glass
+    );
+    display.position.set(
+      centre.x - width * 0.06,
+      0.45,
+      centre.z + depth * 0.5 + 0.045
+    );
+    group.add(display);
+
+    addFrontDoor(
+      group,
+      centre.x + width * 0.34,
+      0.38,
+      centre.z + depth * 0.5 + 0.06,
+      0.22,
+      0.52
+    );
+    addAwning(
+      group,
+      centre.x,
+      0.87,
+      centre.z + depth * 0.5 + 0.18,
+      width * 0.92,
+      0.32,
+      lot.accent,
+      index
+    );
+
+    const vending = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.42, 0.16),
+      cachedMaterial(`shop-vending-${index}`, lot.accent || 0xc84b3c, {
+        emissive: lot.accent || 0xc84b3c,
+        emissiveIntensity: 0.18,
+        roughness: 0.44,
+        metalness: 0.16
+      })
+    );
+    vending.position.set(
+      centre.x - width * 0.4,
+      0.28,
+      centre.z + depth * 0.5 + 0.14
+    );
+    group.add(vending);
+
+    addBuildingLabel(
+      group,
+      lot.sign || "P.A.C SHOP",
+      centre.x,
+      Math.min(height * 0.72, 1.04),
+      centre.z + depth * 0.5 + 0.075,
+      Math.min(width * 0.72, 1.45),
+      lot.accent || "#8b493e"
+    );
+  }
+
+  function addMallDetails(group, lot, centre, width, depth, height, index) {
+    const atriumMaterial = cachedMaterial(`mall-atrium-${index}`, 0x78bdd0, {
+      emissive: 0x245a68,
+      emissiveIntensity: 0.42,
+      roughness: 0.16,
+      metalness: 0.24,
+      transparent: true,
+      opacity: 0.82,
+      depthWrite: true
+    });
+    const atrium = new THREE.Mesh(
+      new THREE.BoxGeometry(width * 0.42, height * 0.78, 0.28),
+      atriumMaterial
+    );
+    atrium.position.set(
+      centre.x,
+      height * 0.42,
+      centre.z + depth * 0.5 + 0.14
+    );
+    group.add(atrium);
+
+    const canopy = new THREE.Mesh(
+      new THREE.BoxGeometry(width * 0.62, 0.1, 0.46),
+      cachedMaterial(`mall-canopy-${index}`, lot.accent || 0xe4a84f, {
+        emissive: lot.accent || 0xe4a84f,
+        emissiveIntensity: 0.24,
+        roughness: 0.36,
+        metalness: 0.22
+      })
+    );
+    canopy.position.set(
+      centre.x,
+      0.62,
+      centre.z + depth * 0.5 + 0.27
+    );
+    group.add(canopy);
+
+    [-0.24, 0.24].forEach((offset) => {
+      const pillar = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.55, 0.08),
+        cachedMaterial(`mall-pillar-${index}`, 0xd8d2c5, {
+          roughness: 0.5,
+          metalness: 0.12
+        })
+      );
+      pillar.position.set(
+        centre.x + width * offset,
+        0.34,
+        centre.z + depth * 0.5 + 0.27
+      );
+      group.add(pillar);
+    });
+
+    const rooftopLogo = new THREE.Mesh(
+      new THREE.TorusGeometry(0.22, 0.045, 10, 26),
+      cachedMaterial(`mall-logo-${index}`, lot.accent || 0xffd15a, {
+        emissive: lot.accent || 0xffd15a,
+        emissiveIntensity: 0.6,
+        roughness: 0.3,
+        metalness: 0.28
+      })
+    );
+    rooftopLogo.position.set(centre.x, height + 0.62, centre.z);
+    group.add(rooftopLogo);
+
+    addFrontDoor(
+      group,
+      centre.x,
+      0.35,
+      centre.z + depth * 0.5 + 0.31,
+      0.34,
+      0.48
+    );
+    addBuildingLabel(
+      group,
+      lot.sign || "CITY MALL",
+      centre.x,
+      Math.min(height * 0.7, 1.55),
+      centre.z + depth * 0.5 + 0.32,
+      Math.min(width * 0.62, 1.85),
+      lot.accent || "#7b5a2a"
+    );
+  }
+
+  function addSchoolDetails(group, lot, centre, width, depth, height, index) {
+    addFrontDoor(
+      group,
+      centre.x,
+      0.38,
+      centre.z + depth * 0.5 + 0.06,
+      0.3,
+      0.54
+    );
+    addAwning(
+      group,
+      centre.x,
+      0.74,
+      centre.z + depth * 0.5 + 0.16,
+      width * 0.56,
+      0.32,
+      lot.accent || 0x4b7aaa,
+      index
+    );
+
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.022, 1.1, 8),
+      cachedMaterial(`school-pole-${index}`, 0xc8cdd0, {
+        metalness: 0.55,
+        roughness: 0.28
+      })
+    );
+    pole.position.set(
+      centre.x - width * 0.42,
+      0.62,
+      centre.z + depth * 0.5 + 0.16
+    );
+    group.add(pole);
+
+    const flag = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.3, 0.17),
+      cachedMaterial(`school-flag-${index}`, lot.accent || 0x4b7aaa, {
+        side: THREE.DoubleSide,
+        roughness: 0.5
+      })
+    );
+    flag.position.set(
+      centre.x - width * 0.42 + 0.15,
+      1.02,
+      centre.z + depth * 0.5 + 0.16
+    );
+    group.add(flag);
+
+    addBuildingLabel(
+      group,
+      lot.sign || "CITY SCHOOL",
+      centre.x,
+      Math.min(height * 0.72, 1.08),
+      centre.z + depth * 0.5 + 0.075,
+      Math.min(width * 0.72, 1.55),
+      lot.accent || "#3f6184"
+    );
+  }
+
+  function addOfficeDetails(group, lot, centre, width, depth, height, index) {
+    const mullionMaterial = cachedMaterial(`office-mullion-${index}`, 0x53626c, {
+      roughness: 0.38,
+      metalness: 0.36
+    });
+    for (let column = -2; column <= 2; column += 1) {
+      const mullion = new THREE.Mesh(
+        new THREE.BoxGeometry(0.025, height * 0.74, 0.04),
+        mullionMaterial
+      );
+      mullion.position.set(
+        centre.x + column * width * 0.15,
+        height * 0.52,
+        centre.z + depth * 0.5 + 0.045
+      );
+      group.add(mullion);
+    }
+
+    const antenna = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.026, 0.78, 8),
+      mullionMaterial
+    );
+    antenna.position.set(centre.x + width * 0.24, height + 0.54, centre.z);
+    group.add(antenna);
+
+    addBuildingLabel(
+      group,
+      lot.sign || "CENTRAL WORKS",
+      centre.x,
+      Math.min(height * 0.62, 1.55),
+      centre.z + depth * 0.5 + 0.075,
+      Math.min(width * 0.62, 1.6),
+      "#334d58"
+    );
+  }
+
   function createBuilding(lot, index) {
     const group = new THREE.Group();
     const centre = lotCentre(lot);
@@ -616,38 +1208,108 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       }
     }
 
-    registerBuilding(group, lot, [
-      bodyMaterial,
-      roofMaterial,
-      glassMaterial,
-      signMaterial,
-      unitMaterial
-    ]);
+    if (kind === "housing") {
+      addHousingDetails(group, lot, centre, width, depth, height, index);
+    } else if (kind === "shop") {
+      addShopDetails(group, lot, centre, width, depth, height, index);
+    } else if (kind === "mall") {
+      addMallDetails(group, lot, centre, width, depth, height, index);
+    } else if (kind === "school") {
+      addSchoolDetails(group, lot, centre, width, depth, height, index);
+    } else if (kind === "office") {
+      addOfficeDetails(group, lot, centre, width, depth, height, index);
+    } else if (["bigBuilding", "smallBuilding"].includes(kind)) {
+      addBuildingLabel(
+        group,
+        lot.sign || (kind === "bigBuilding" ? "CITY TOWER" : "CITY BLOCK"),
+        centre.x,
+        Math.min(height * 0.5, 1.32),
+        centre.z + depth * 0.5 + 0.075,
+        Math.min(width * 0.58, 1.45),
+        lot.accent || "#44545d"
+      );
+    }
+
+    registerBuilding(group, lot, collectMaterials(group));
   }
 
   function createStall(group, lot, centre, width, depth, index) {
-    const baseMaterial = cachedMaterial(`stall-base-${index}`, 0x4a3e34, {
-      roughness: 0.9
+    const counterMaterial = cachedMaterial(`stall-counter-${index}`, 0x5b4937, {
+      roughness: 0.88
     });
-    const awningMaterial = cachedMaterial(`stall-awning-${index}`, lot.accent || 0xef6b52, {
-      emissive: lot.accent || 0xef6b52,
-      emissiveIntensity: 0.1,
-      roughness: 0.65
+    const postMaterial = cachedMaterial(`stall-post-${index}`, 0x3f4446, {
+      roughness: 0.64,
+      metalness: 0.18
+    });
+    const accent = lot.accent || 0xef6b52;
+
+    const counter = new THREE.Mesh(
+      new THREE.BoxGeometry(width * 0.88, 0.38, depth * 0.62),
+      counterMaterial
+    );
+    counter.position.set(centre.x, 0.25, centre.z + depth * 0.08);
+    group.add(counter);
+
+    [-1, 1].forEach((sideX) => {
+      [-1, 1].forEach((sideZ) => {
+        const post = new THREE.Mesh(
+          new THREE.BoxGeometry(0.045, 0.82, 0.045),
+          postMaterial
+        );
+        post.position.set(
+          centre.x + sideX * width * 0.46,
+          0.48,
+          centre.z + sideZ * depth * 0.42
+        );
+        group.add(post);
+      });
     });
 
-    const base = new THREE.Mesh(
-      new THREE.BoxGeometry(width, 0.58, depth),
-      baseMaterial
-    );
-    base.position.set(centre.x, 0.35, centre.z);
-    group.add(base);
+    const stripeCount = 6;
+    for (let stripe = 0; stripe < stripeCount; stripe += 1) {
+      const stripeMaterial = cachedMaterial(
+        `stall-stripe-${index}-${stripe % 2}`,
+        stripe % 2 === 0 ? accent : 0xf5e8c9,
+        {
+          emissive: stripe % 2 === 0 ? accent : 0x000000,
+          emissiveIntensity: stripe % 2 === 0 ? 0.14 : 0,
+          roughness: 0.58
+        }
+      );
+      const panel = new THREE.Mesh(
+        new THREE.BoxGeometry(width * 1.04 / stripeCount, 0.09, depth * 1.04),
+        stripeMaterial
+      );
+      panel.position.set(
+        centre.x - width * 0.52 + (stripe + 0.5) * width * 1.04 / stripeCount,
+        0.93,
+        centre.z
+      );
+      group.add(panel);
+    }
 
-    const awning = new THREE.Mesh(
-      new THREE.BoxGeometry(width * 1.08, 0.1, depth * 1.05),
-      awningMaterial
+    for (let crateIndex = 0; crateIndex < 3; crateIndex += 1) {
+      const crate = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.13, 0.16),
+        cachedMaterial(`stall-crate-${index}`, 0x88663f, { roughness: 0.94 })
+      );
+      crate.position.set(
+        centre.x - width * 0.28 + crateIndex * 0.2,
+        0.51,
+        centre.z + depth * 0.28
+      );
+      group.add(crate);
+    }
+
+    addBuildingLabel(
+      group,
+      lot.sign || "CITY STALL",
+      centre.x,
+      0.77,
+      centre.z + depth * 0.5 + 0.03,
+      Math.min(width * 0.72, 1.15),
+      accent
     );
-    awning.position.set(centre.x, 0.78, centre.z);
-    group.add(awning);
   }
 
   function createPark(group, lot, index) {
@@ -932,23 +1594,41 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     group.add(elementHalo);
 
     const wake = new THREE.Group();
-    for (let index = 0; index < 3; index += 1) {
-      const trail = new THREE.Mesh(
-        new THREE.TorusGeometry(0.23 - index * 0.035, 0.018, 6, 24, Math.PI * 1.45),
+    for (let index = 0; index < MAX_NEAR_MISS_SPARKLES; index += 1) {
+      const sparkle = new THREE.Mesh(
+        new THREE.OctahedronGeometry(index % 5 === 0 ? 0.045 : 0.032, 0),
         new THREE.MeshBasicMaterial({
           color: 0xffedaa,
           transparent: true,
-          opacity: 0.22 - index * 0.045,
+          opacity: 0,
           blending: THREE.AdditiveBlending,
-          depthWrite: false
+          depthWrite: false,
+          toneMapped: false
         })
       );
-      trail.rotation.y = Math.PI / 2;
-      trail.position.x = -0.48 - index * 0.24;
-      wake.add(trail);
+      sparkle.userData.seed = seededValue(index * 179 + 37);
+      wake.add(sparkle);
     }
     wake.visible = false;
     group.add(wake);
+
+    const impactSparkles = new THREE.Group();
+    for (let index = 0; index < 9; index += 1) {
+      const sparkle = new THREE.Mesh(
+        new THREE.OctahedronGeometry(index % 3 === 0 ? 0.055 : 0.034, 0),
+        new THREE.MeshBasicMaterial({
+          color: 0xffedaa,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          toneMapped: false
+        })
+      );
+      impactSparkles.add(sparkle);
+    }
+    impactSparkles.visible = false;
+    group.add(impactSparkles);
 
     group.userData.body = body;
     group.userData.bodyMaterial = bodyMaterial;
@@ -960,7 +1640,11 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     group.userData.crown = crown;
     group.userData.elementHalo = elementHalo;
     group.userData.wake = wake;
+    group.userData.impactSparkles = impactSparkles;
     group.userData.lastSkinKey = "";
+    group.userData.wasAlive = true;
+    group.userData.dissolveAge = null;
+    rememberFadeMaterials(group);
 
     return group;
   }
@@ -1031,8 +1715,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     actor.userData.elementHalo.visible = Boolean(skin.element);
     actor.userData.elementHalo.material.color.set(accent);
 
-    actor.userData.wake.children.forEach((trail) => {
-      trail.material.color.set(skin.accentLight || skin.light || accent);
+    const trailColor = skin.accentLight || skin.light || accent;
+    actor.userData.wake.children.forEach((sparkle) => {
+      sparkle.material.color.set(trailColor);
+    });
+    actor.userData.impactSparkles.children.forEach((sparkle) => {
+      sparkle.material.color.set(trailColor);
     });
   }
 
@@ -1040,10 +1728,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     if (!actor || !pacman) return;
 
     const time = options.time || 0;
+    const dt = Math.max(0, Number(options.dt) || 0);
     const remote = Boolean(options.remote);
     const moving = Boolean(pacman.dir?.x || pacman.dir?.y);
     const skin = resolveSkin(options.skin, remote, options.accountName);
     const nearMiss = options.nearMiss || null;
+    const alive = options.alive !== false;
 
     applyPacSkin(actor, skin, remote);
 
@@ -1053,7 +1743,38 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       Number(pacman.y) || 0
     );
     actor.rotation.y = -(Number(pacman.angle) || 0);
-    actor.visible = options.alive !== false;
+
+    if (actor.userData.wasAlive && !alive) {
+      actor.userData.dissolveAge = 0;
+      spawnPacDissolve(actor, skin);
+    } else if (!actor.userData.wasAlive && alive) {
+      actor.userData.dissolveAge = null;
+      actor.scale.setScalar(1);
+      actor.visible = true;
+      restoreActorOpacity(actor);
+    }
+    actor.userData.wasAlive = alive;
+
+    if (!alive) {
+      actor.userData.dissolveAge = Math.max(
+        0,
+        Number(actor.userData.dissolveAge) || 0
+      ) + dt;
+      const progress = clamp(
+        actor.userData.dissolveAge / PAC_DISSOLVE_SECONDS,
+        0,
+        1
+      );
+      const alpha = 1 - smoothstep(0, 1, progress);
+      setActorOpacity(actor, alpha);
+      actor.scale.setScalar(1 - progress * 0.2);
+      actor.userData.wake.visible = false;
+      actor.userData.impactSparkles.visible = false;
+      actor.visible = progress < 1;
+      return;
+    }
+
+    actor.visible = true;
 
     const bite = moving
       ? 0.08 + Math.abs(Math.sin((Number(pacman.movingTime) || time) * 12)) * 0.34
@@ -1068,15 +1789,71 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     actor.userData.elementHalo.rotation.z = time * 1.4;
     actor.userData.crown.rotation.y = time * 0.7;
 
+    const stage = Math.max(0, Number(nearMiss?.stage) || 0);
     const wakeCount = Math.max(0, Number(nearMiss?.wakeCount) || 0);
-    actor.userData.wake.visible = moving && wakeCount > 0;
-    actor.userData.wake.children.forEach((trail, index) => {
-      trail.visible = index < Math.min(3, wakeCount);
-      trail.rotation.x = Math.sin(time * 2 + index) * 0.08;
+    const particleCount = stage <= 0
+      ? 0
+      : Math.min(
+          MAX_NEAR_MISS_SPARKLES,
+          4 + wakeCount * 4 +
+          (nearMiss?.luminous ? 3 : 0) +
+          (nearMiss?.afterimage ? 3 : 0) +
+          (nearMiss?.mastery ? 4 : 0)
+        );
+    const trailLength =
+      0.7 + wakeCount * 0.3 + (nearMiss?.afterimage ? 0.5 : 0);
+    actor.userData.wake.visible = moving && particleCount > 0;
+
+    actor.userData.wake.children.forEach((sparkle, index) => {
+      const visible = moving && index < particleCount;
+      sparkle.visible = visible;
+      if (!visible) return;
+
+      const seed = sparkle.userData.seed || 0;
+      const cycle = (time * (1.15 + seed * 0.9) + seed * 7.3) % 1;
+      const lane = (index % 5) - 2;
+      const sideDrift = lane * (0.045 + wakeCount * 0.012);
+      const verticalDrift = Math.sin(time * 5.2 + index * 1.7) * 0.06;
+      sparkle.position.set(
+        -0.46 - cycle * trailLength,
+        verticalDrift + (seed - 0.5) * 0.16,
+        sideDrift + Math.sin(time * 3.4 + seed * 9) * 0.05
+      );
+      sparkle.rotation.x = time * (2.1 + seed * 2.2);
+      sparkle.rotation.y = time * (3.4 + seed * 2.5);
+      const scale =
+        (0.56 + seed * 0.8) *
+        (nearMiss?.luminous ? 1.18 : 1) *
+        (nearMiss?.mastery ? 1.12 : 1) *
+        (1 - cycle * 0.46);
+      sparkle.scale.setScalar(scale);
+      sparkle.material.opacity =
+        (0.18 + (1 - cycle) * 0.58) *
+        (nearMiss?.luminous ? 1 : 0.72);
+    });
+
+    const flash = clamp(Number(nearMiss?.flash) || 0, 0, 1);
+    const showImpact = Boolean(nearMiss?.impact && flash > 0.01);
+    const impactSide = Number(nearMiss?.side) < 0 ? -1 : 1;
+    actor.userData.impactSparkles.visible = showImpact;
+    actor.userData.impactSparkles.children.forEach((sparkle, index) => {
+      sparkle.visible = showImpact;
+      if (!showImpact) return;
+
+      const angle = index * (Math.PI * 2 / 9) + time * 1.8;
+      const radius = 0.34 + (index % 3) * 0.1 + (1 - flash) * 0.22;
+      sparkle.position.set(
+        -0.04 + Math.cos(angle) * radius * 0.42,
+        Math.sin(angle * 1.4) * 0.25,
+        impactSide * (0.36 + radius * 0.52)
+      );
+      sparkle.scale.setScalar(0.72 + flash * 1.35);
+      sparkle.rotation.y = time * 5 + index;
+      sparkle.material.opacity = flash * (nearMiss?.mastery ? 0.98 : 0.78);
     });
   }
 
-  function syncPacActors(time) {
+  function syncPacActors(time, dt) {
     if (!source.localPacman) return;
 
     if (!state.localActor) {
@@ -1089,8 +1866,19 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const localNearMiss =
       window.PacmanNearMiss?.resolveDrawState?.(source.localOptions || {}) || null;
 
+    const localNearMissCount = Math.max(0, Number(localNearMiss?.count) || 0);
+    if (state.lastLocalNearMissCount === null) {
+      state.lastLocalNearMissCount = localNearMissCount;
+    } else if (localNearMissCount > state.lastLocalNearMissCount) {
+      state.cameraPulseAge = 0;
+      state.lastLocalNearMissCount = localNearMissCount;
+    } else if (localNearMissCount < state.lastLocalNearMissCount) {
+      state.lastLocalNearMissCount = localNearMissCount;
+    }
+
     updatePacActor(state.localActor, source.localPacman, {
       time,
+      dt,
       remote: false,
       alive: localRecentlyDrawn,
       nearMiss: localNearMiss
@@ -1121,6 +1909,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
         },
         {
           time,
+          dt,
           remote: true,
           alive: remote.alive !== false,
           skin: remote.skin,
@@ -1498,6 +2287,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
     state.ghostActors.forEach((actor, id) => {
       if (activeIds.has(id)) return;
+      spawnGhostCrumble(actor);
       disposeObject(actor);
       state.ghostActors.delete(id);
     });
@@ -1568,7 +2358,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       const bob = Math.sin(time * 3.2 + phase) * 0.055;
 
       dummy.position.set(pellet.x, 0.31 + bob, pellet.y);
-      dummy.rotation.set(Math.PI / 2, time * spin * 3.4 + phase, 0);
+      dummy.rotation.order = "YXZ";
+      dummy.rotation.set(
+        Math.PI / 2,
+        -(time * spin * 4.35 + phase),
+        Math.sin(time * 1.8 + phase) * 0.055
+      );
       dummy.scale.set(1, 1, 1);
       dummy.updateMatrix();
 
@@ -2052,6 +2847,21 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     state.camera.position.lerp(state.desiredCamera, smoothing);
     state.cameraLookAt.lerp(state.desiredLookAt, smoothing);
     state.camera.lookAt(state.cameraLookAt);
+
+    if (state.cameraPulseAge < CAMERA_NEAR_MISS_SECONDS) {
+      state.cameraPulseAge += dt;
+    }
+    const pulseProgress = clamp(
+      state.cameraPulseAge / CAMERA_NEAR_MISS_SECONDS,
+      0,
+      1
+    );
+    const pulse = pulseProgress < 1 ? Math.sin(Math.PI * pulseProgress) : 0;
+    const nextZoom = 1 + CAMERA_NEAR_MISS_ZOOM * pulse;
+    if (Math.abs(state.camera.zoom - nextZoom) > 0.0001) {
+      state.camera.zoom = nextZoom;
+      state.camera.updateProjectionMatrix();
+    }
   }
 
   function updateModeButton() {
@@ -2112,11 +2922,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const environment = getEnvironment();
     syncCoins(now);
     syncPowerups(now);
-    syncPacActors(now);
+    syncPacActors(now, dt);
     syncGhosts(now);
     syncCitizens(environment, now);
     updateEnvironment(environment, now);
     updateBuildingOcclusion();
+    updateTransientEffects(dt);
     updateCamera(dt);
 
     state.renderer.render(state.scene, state.camera);
@@ -2153,6 +2964,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
       document.addEventListener("pacman:room-started", () => {
         state.lastSeasonId = null;
+        state.lastLocalNearMissCount = null;
+        state.cameraPulseAge = Number.POSITIVE_INFINITY;
         updateActiveClass();
       });
       document.addEventListener("pacman:room-left", updateActiveClass);
