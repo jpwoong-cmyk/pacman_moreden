@@ -270,8 +270,10 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     state.scene.background = new THREE.Color(0x17212a);
     state.scene.fog = new THREE.Fog(0x17212a, 22, 74);
 
-    state.camera = new THREE.PerspectiveCamera(43, 16 / 9, 0.1, 180);
-    state.camera.position.set(8, 13.5, 10.5);
+    state.camera = new THREE.PerspectiveCamera(39, 16 / 9, 0.1, 180);
+    // Keep world X horizontal and world Z vertical on screen. This makes
+    // joystick Up/Down/Left/Right match the rendered roads exactly.
+    state.camera.position.set(0, 16.2, 8.8);
 
     state.renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -758,94 +760,125 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       color: remote ? 0xc8b565 : 0xe8c44c,
       emissive: 0x4a3400,
       emissiveIntensity: 0.25,
-      roughness: 0.42,
-      metalness: 0.16
-    });
-
-    const body = new THREE.Mesh(
-      new THREE.SphereGeometry(0.39, 24, 18),
-      bodyMaterial
-    );
-    body.scale.set(1.03, 0.96, 1.03);
-    group.add(body);
-
-    const faceMaterial = new THREE.MeshStandardMaterial({
-      color: 0x14181d,
-      emissive: 0x05070a,
-      emissiveIntensity: 0.22,
-      roughness: 0.3,
+      roughness: 0.4,
       metalness: 0.18
     });
 
-    const mouthCore = new THREE.Mesh(
-      new THREE.SphereGeometry(0.19, 16, 12),
-      faceMaterial
+    /*
+     * P.A.C Core: a rounded arcade creature with a circular animated maw.
+     * The mouth is inset into the body instead of sticking out like a beak.
+     */
+    const body = new THREE.Mesh(
+      new THREE.SphereGeometry(0.4, 28, 22),
+      bodyMaterial
     );
-    mouthCore.scale.set(0.5, 0.72, 0.92);
-    mouthCore.position.set(0.35, -0.025, 0);
+    body.scale.set(1.04, 0.98, 1.04);
+    group.add(body);
+
+    const mouthMaterial = new THREE.MeshStandardMaterial({
+      color: 0x080b0e,
+      emissive: 0x020304,
+      emissiveIntensity: 0.18,
+      roughness: 0.92,
+      metalness: 0
+    });
+
+    const mouthCore = new THREE.Mesh(
+      new THREE.CircleGeometry(0.19, 30),
+      mouthMaterial
+    );
+    mouthCore.rotation.y = Math.PI / 2;
+    mouthCore.position.set(0.407, -0.015, 0);
+    mouthCore.scale.set(1, 0.82, 1);
     group.add(mouthCore);
 
     const jawMaterial = bodyMaterial.clone();
     const upperJawPivot = new THREE.Group();
     const lowerJawPivot = new THREE.Group();
 
-    const upperJaw = new THREE.Mesh(
-      new THREE.BoxGeometry(0.23, 0.09, 0.34),
+    const upperLip = new THREE.Mesh(
+      new THREE.TorusGeometry(0.185, 0.047, 10, 28, Math.PI),
       jawMaterial
     );
-    upperJaw.position.set(0.39, 0.11, 0);
-    upperJaw.rotation.z = -0.12;
-    upperJawPivot.add(upperJaw);
+    upperLip.rotation.y = Math.PI / 2;
+    upperLip.position.x = 0.405;
+    upperJawPivot.add(upperLip);
 
-    const lowerJaw = upperJaw.clone();
-    lowerJaw.position.y = -0.11;
-    lowerJaw.rotation.z = 0.12;
-    lowerJawPivot.add(lowerJaw);
+    const lowerLip = new THREE.Mesh(
+      new THREE.TorusGeometry(0.185, 0.047, 10, 28, Math.PI),
+      jawMaterial
+    );
+    lowerLip.rotation.set(0, Math.PI / 2, Math.PI);
+    lowerLip.position.x = 0.405;
+    lowerJawPivot.add(lowerLip);
 
     group.add(upperJawPivot, lowerJawPivot);
 
-    const visorMaterial = new THREE.MeshStandardMaterial({
-      color: remote ? 0x3d444c : 0x10161d,
-      emissive: remote ? 0x080a0c : 0x0a2530,
-      emissiveIntensity: remote ? 0.08 : 0.35,
-      roughness: 0.23,
-      metalness: 0.32
+    const eyeWhiteMaterial = new THREE.MeshStandardMaterial({
+      color: 0xf8f5dc,
+      emissive: remote ? 0x5d6268 : 0xded59e,
+      emissiveIntensity: remote ? 0.16 : 0.38,
+      roughness: 0.3,
+      metalness: 0.04
+    });
+    const pupilMaterial = new THREE.MeshStandardMaterial({
+      color: remote ? 0x28313a : 0x15232d,
+      emissive: remote ? 0x030506 : 0x0a3340,
+      emissiveIntensity: remote ? 0.06 : 0.34,
+      roughness: 0.24,
+      metalness: 0.12
     });
 
-    const visor = new THREE.Mesh(
-      new THREE.BoxGeometry(0.12, 0.12, 0.46),
-      visorMaterial
-    );
-    visor.position.set(0.345, 0.145, 0);
-    group.add(visor);
-
-    const eyeMaterial = new THREE.MeshStandardMaterial({
-      color: 0xf7f4df,
-      emissive: 0xece6b6,
-      emissiveIntensity: 0.58,
-      roughness: 0.25
-    });
-
-    [-0.105, 0.105].forEach((z) => {
+    [-0.125, 0.125].forEach((z) => {
       const eye = new THREE.Mesh(
-        new THREE.SphereGeometry(0.035, 10, 8),
-        eyeMaterial
+        new THREE.SphereGeometry(0.075, 14, 11),
+        eyeWhiteMaterial
       );
-      eye.position.set(0.416, 0.155, z);
+      eye.scale.set(0.48, 1.08, 0.82);
+      eye.position.set(0.34, 0.18, z);
       group.add(eye);
+
+      const pupil = new THREE.Mesh(
+        new THREE.SphereGeometry(0.031, 10, 8),
+        pupilMaterial
+      );
+      pupil.scale.set(0.48, 1, 0.82);
+      pupil.position.set(0.395, 0.177, z);
+      group.add(pupil);
+    });
+
+    const browMaterial = new THREE.MeshStandardMaterial({
+      color: remote ? 0x6e747a : 0x8a6d20,
+      emissive: remote ? 0x080a0c : 0x332000,
+      emissiveIntensity: 0.14,
+      roughness: 0.48,
+      metalness: 0.16
+    });
+
+    [-0.125, 0.125].forEach((z, index) => {
+      const brow = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.018, 0.018, 0.105, 8),
+        browMaterial
+      );
+      brow.rotation.x = Math.PI / 2;
+      brow.rotation.y = index === 0 ? -0.12 : 0.12;
+      brow.position.set(0.382, 0.264, z);
+      group.add(brow);
+    });
+
+    const sideBandMaterial = new THREE.MeshStandardMaterial({
+      color: remote ? 0x8f989f : 0xffe889,
+      emissive: remote ? 0x11161b : 0x5b4000,
+      emissiveIntensity: remote ? 0.12 : 0.28,
+      roughness: 0.32,
+      metalness: 0.42,
+      transparent: true,
+      opacity: 0.78
     });
 
     const accentRing = new THREE.Mesh(
-      new THREE.TorusGeometry(0.405, 0.018, 8, 32),
-      new THREE.MeshStandardMaterial({
-        color: remote ? 0xb7c0c8 : 0xffe889,
-        emissive: remote ? 0x1a2028 : 0x5b4000,
-        emissiveIntensity: 0.3,
-        roughness: 0.35,
-        metalness: 0.4,
-        transparent: true,
-        opacity: 0.7
-      })
+      new THREE.TorusGeometry(0.407, 0.017, 8, 36),
+      sideBandMaterial
     );
     accentRing.rotation.y = Math.PI / 2;
     group.add(accentRing);
@@ -864,7 +897,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       crownMaterial
     );
     crownBand.rotation.x = Math.PI / 2;
-    crownBand.position.y = 0.37;
+    crownBand.position.y = 0.38;
     crown.add(crownBand);
 
     for (let spike = 0; spike < 5; spike += 1) {
@@ -875,7 +908,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       const angle = spike * (Math.PI * 2 / 5);
       spikeMesh.position.set(
         Math.cos(angle) * 0.15,
-        0.45,
+        0.46,
         Math.sin(angle) * 0.15
       );
       crown.add(spikeMesh);
@@ -920,6 +953,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     group.userData.body = body;
     group.userData.bodyMaterial = bodyMaterial;
     group.userData.jawMaterial = jawMaterial;
+    group.userData.mouthCore = mouthCore;
     group.userData.upperJawPivot = upperJawPivot;
     group.userData.lowerJawPivot = lowerJawPivot;
     group.userData.accentRing = accentRing;
@@ -1025,8 +1059,11 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       ? 0.08 + Math.abs(Math.sin((Number(pacman.movingTime) || time) * 12)) * 0.34
       : 0.06;
 
-    actor.userData.upperJawPivot.rotation.z = -bite;
-    actor.userData.lowerJawPivot.rotation.z = bite;
+    actor.userData.upperJawPivot.rotation.z = -bite * 0.58;
+    actor.userData.lowerJawPivot.rotation.z = bite * 0.58;
+    if (actor.userData.mouthCore) {
+      actor.userData.mouthCore.scale.y = 0.68 + bite * 1.35;
+    }
     actor.userData.accentRing.rotation.x = time * 0.7;
     actor.userData.elementHalo.rotation.z = time * 1.4;
     actor.userData.crown.rotation.y = time * 0.7;
@@ -1116,7 +1153,154 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     };
   }
 
+
+  function createAlertMarker() {
+    const marker = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xffd84d,
+      emissive: 0xff5b16,
+      emissiveIntensity: 0.95,
+      roughness: 0.28,
+      metalness: 0.12
+    });
+
+    const bar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.035, 0.035, 0.18, 10),
+      material
+    );
+    bar.position.y = 0.1;
+    marker.add(bar);
+
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 12, 9),
+      material
+    );
+    dot.position.y = -0.105;
+    marker.add(dot);
+
+    const halo = new THREE.Mesh(
+      new THREE.TorusGeometry(0.15, 0.012, 6, 20),
+      new THREE.MeshBasicMaterial({
+        color: 0xffd84d,
+        transparent: true,
+        opacity: 0.56,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    halo.position.y = 0.02;
+    marker.add(halo);
+
+    marker.position.y = 0.82;
+    marker.visible = false;
+    marker.userData.halo = halo;
+    return marker;
+  }
+
+  function createPuppyActor(creep) {
+    const group = new THREE.Group();
+    const bodyMaterial = new THREE.MeshStandardMaterial({
+      color: 0xbfc7d0,
+      emissive: 0x33414f,
+      emissiveIntensity: 0.32,
+      roughness: 0.3,
+      metalness: 0.58
+    });
+
+    const body = new THREE.Mesh(
+      new THREE.SphereGeometry(0.33, 24, 18),
+      bodyMaterial
+    );
+    body.scale.set(1, 0.98, 1);
+    group.add(body);
+
+    const eyeWhiteMaterial = new THREE.MeshStandardMaterial({
+      color: 0xf9fcff,
+      emissive: 0xdcecff,
+      emissiveIntensity: 0.34,
+      roughness: 0.22
+    });
+    const irisMaterial = new THREE.MeshStandardMaterial({
+      color: 0x385d80,
+      emissive: 0x173b58,
+      emissiveIntensity: 0.5,
+      roughness: 0.18,
+      metalness: 0.1
+    });
+    const pupilMaterial = new THREE.MeshStandardMaterial({
+      color: 0x05090e,
+      roughness: 0.16
+    });
+
+    [-0.12, 0.12].forEach((z) => {
+      const eye = new THREE.Mesh(
+        new THREE.SphereGeometry(0.105, 14, 11),
+        eyeWhiteMaterial
+      );
+      eye.scale.set(0.52, 1.15, 0.78);
+      eye.position.set(0.27, 0.06, z);
+      group.add(eye);
+
+      const iris = new THREE.Mesh(
+        new THREE.SphereGeometry(0.057, 11, 9),
+        irisMaterial
+      );
+      iris.scale.set(0.5, 1.1, 0.78);
+      iris.position.set(0.326, 0.055, z);
+      group.add(iris);
+
+      const pupil = new THREE.Mesh(
+        new THREE.SphereGeometry(0.025, 9, 7),
+        pupilMaterial
+      );
+      pupil.scale.set(0.5, 1.05, 0.78);
+      pupil.position.set(0.362, 0.052, z);
+      group.add(pupil);
+    });
+
+    const aura = new THREE.Mesh(
+      new THREE.TorusGeometry(0.4, 0.014, 7, 28),
+      new THREE.MeshBasicMaterial({
+        color: 0xc8ecff,
+        transparent: true,
+        opacity: 0.42,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    aura.rotation.x = Math.PI / 2;
+    aura.position.y = -0.3;
+    group.add(aura);
+
+    const tears = new THREE.Group();
+    [-0.12, 0.12].forEach((z) => {
+      const tear = new THREE.Mesh(
+        new THREE.SphereGeometry(0.035, 9, 7),
+        new THREE.MeshBasicMaterial({
+          color: 0x7fd5ff,
+          transparent: true,
+          opacity: 0.86,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      tear.scale.set(0.7, 1.45, 0.7);
+      tear.position.set(0.35, -0.02, z);
+      tears.add(tear);
+    });
+    tears.visible = false;
+    group.add(tears);
+
+    group.userData.isPuppy = true;
+    group.userData.bodyMaterial = bodyMaterial;
+    group.userData.effect = aura;
+    group.userData.tears = tears;
+    group.userData.phase = Number(creep.animOffset) || Math.random() * Math.PI * 2;
+    return group;
+  }
+
   function createGhostActor(creep) {
+    if (creep?.isPuppy) return createPuppyActor(creep);
     const palette = ghostPalette(creep);
     const element = creep.isElite ? "shadow" : creep.element;
     const water = element === "water";
@@ -1217,16 +1401,22 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     }
     group.add(particles);
 
+    const alertMarker = createAlertMarker();
+    group.add(alertMarker);
+
     group.userData.element = element;
     group.userData.bodyMaterial = bodyMaterial;
     group.userData.effect = effect;
     group.userData.particles = particles;
+    group.userData.alertMarker = alertMarker;
     group.userData.phase = Number(creep.animOffset) || Math.random() * Math.PI * 2;
     return group;
   }
 
   function syncGhosts(time) {
-    const creeps = source.creeps?.creeps || [];
+    const hostileCreeps = source.creeps?.creeps || [];
+    const puppy = source.creeps?.puppy || null;
+    const creeps = puppy ? [...hostileCreeps, puppy] : hostileCreeps;
     const activeIds = new Set();
 
     creeps.forEach((creep, index) => {
@@ -1234,6 +1424,15 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       activeIds.add(id);
 
       let actor = state.ghostActors.get(id);
+      const actorTypeChanged = Boolean(actor) &&
+        Boolean(actor.userData.isPuppy) !== Boolean(creep.isPuppy);
+
+      if (actorTypeChanged) {
+        disposeObject(actor);
+        state.ghostActors.delete(id);
+        actor = null;
+      }
+
       if (!actor) {
         actor = createGhostActor(creep);
         state.ghostActors.set(id, actor);
@@ -1241,16 +1440,43 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       }
 
       const phase = actor.userData.phase + index * 0.13;
-      const bob = Math.sin(time * 4.2 + phase) * 0.055;
-      actor.position.set(creep.x, 0.49 + bob, creep.y);
+      const bobSpeed = creep.isPuppy ? 5.4 : 4.2;
+      const bob = Math.sin(time * bobSpeed + phase) * 0.055;
+      const panicShake = creep.isPuppy && creep.afraid
+        ? Math.sin(time * 24 + phase) * 0.025
+        : 0;
+
+      actor.position.set(creep.x + panicShake, 0.49 + bob, creep.y);
       actor.rotation.y = -Math.atan2(
         Number(creep.dir?.y) || 0,
         Number(creep.dir?.x) || 0.001
       );
 
+      if (creep.isPuppy) {
+        actor.scale.setScalar(creep.afraid ? 0.96 : 1);
+        actor.userData.effect.rotation.z = time * (creep.afraid ? 2.6 : 0.8) + phase;
+        actor.userData.effect.material.opacity = creep.afraid ? 0.72 : 0.42;
+        actor.userData.bodyMaterial.emissiveIntensity = creep.afraid ? 0.55 : 0.32;
+        actor.userData.tears.visible = Boolean(creep.afraid);
+        actor.userData.tears.children.forEach((tear, tearIndex) => {
+          const fall = (time * 2.8 + phase + tearIndex * 0.46) % 1;
+          tear.position.y = -0.01 - fall * 0.28;
+          tear.material.opacity = 0.9 - fall * 0.55;
+        });
+        return;
+      }
+
       actor.scale.setScalar(creep.alerted ? 1.06 : 1);
       actor.userData.effect.rotation.z = time * (creep.alerted ? 2.1 : 0.8) + phase;
       actor.userData.effect.material.opacity = creep.alerted ? 0.72 : 0.38;
+
+      if (actor.userData.alertMarker) {
+        actor.userData.alertMarker.visible = Boolean(creep.alerted);
+        actor.userData.alertMarker.position.y =
+          0.83 + Math.sin(time * 7 + phase) * 0.045;
+        actor.userData.alertMarker.rotation.y = -actor.rotation.y;
+        actor.userData.alertMarker.userData.halo.rotation.z = time * 2.8;
+      }
 
       const palette = ghostPalette(creep);
       actor.userData.bodyMaterial.color.set(palette.color);
@@ -1810,12 +2036,16 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const dirX = Number(source.localPacman.dir?.x) || 0;
     const dirZ = Number(source.localPacman.dir?.y) || 0;
 
-    const lead = mobile ? 0.65 : 1.05;
-    state.desiredLookAt.set(x + dirX * lead, 0.12, z + dirZ * lead);
+    const lead = mobile ? 0.48 : 0.72;
+    state.desiredLookAt.set(x + dirX * lead, 0.1, z + dirZ * lead);
+
+    // Camera stays directly south of the player with zero left/right yaw.
+    // Therefore: joystick left/right = screen left/right, and up/down =
+    // screen up/down. The higher elevation also reduces the heavy slant.
     state.desiredCamera.set(
-      x + (mobile ? 5.8 : 7.2),
-      mobile ? 12.2 : 13.8,
-      z + (mobile ? 8.3 : 10.1)
+      x,
+      mobile ? 14.8 : 16.4,
+      z + (mobile ? 7.3 : 8.6)
     );
 
     const smoothing = 1 - Math.pow(1 - CAMERA_LERP, Math.max(1, dt * 60));
