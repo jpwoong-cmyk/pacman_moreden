@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="css/powerups.css">
   <link rel="stylesheet" href="css/near-miss.css">
   <link rel="stylesheet" href="css/season-update.css">
+  <link rel="stylesheet" href="css/three-renderer.css">
   <link rel="stylesheet" href="css/lobby-puppy.css">
   <link rel="stylesheet" href="css/coop-mode.css">
   <link rel="stylesheet" href="css/guest-mode.css">
@@ -223,7 +224,7 @@
       <div class="hud" aria-label="Game status">
         <div class="hud-item"><span>Room</span><strong id="roomValue">------</strong></div>
         <div class="hud-item"><span>Score</span><strong id="scoreValue">0</strong></div>
-        <div class="hud-item"><span>Pellets</span><strong id="pelletValue">0</strong></div>
+        <div class="hud-item"><span>Coins</span><strong id="pelletValue">0</strong></div>
         <div class="hud-item"><span>Creeps</span><strong id="creepValue">0</strong></div>
         <div class="hud-item"><span>Alerted</span><strong id="alertValue">0</strong></div>
         <div class="hud-item"><span>Next Spawn</span><strong id="spawnValue">SYNC</strong></div>
@@ -247,6 +248,7 @@
       </div>
 
       <canvas id="gameCanvas" width="1600" height="900" tabindex="0" aria-label="P.A.C game canvas. On mobile, swipe to move."></canvas>
+      <div id="threeGameViewport" class="three-game-viewport" aria-hidden="true"></div>
       <div class="swipe-hint" aria-hidden="true"><span>↕</span> Swipe to move <span>↔</span></div>
 
       <div id="startOverlay" class="game-overlay hidden">
@@ -263,6 +265,7 @@
       <div class="button-row">
         <button id="newMapButton" type="button">New City</button>
         <button id="viewButton" type="button" aria-pressed="true">View: Depth</button>
+        <button id="graphicsModeButton" type="button" aria-pressed="true">Graphics: 3D</button>
         <button id="pauseButton" type="button" aria-pressed="false">Pause</button>
         <button id="leaveRoomButton" type="button">Leave Room</button>
       </div>
@@ -309,5 +312,6 @@
   <script src="js/coop-mode.js"></script>
   <script src="js/mobile-viewport.js"></script>
   <script src="js/mobile-joystick.js"></script>
+  <script type="module" src="js/three/three-loader.js"></script>
 </body>
 </html>
