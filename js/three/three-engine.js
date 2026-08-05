@@ -597,20 +597,20 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const context = canvas.getContext("2d");
 
     if (kind === "road") {
-      context.fillStyle = "#353c40";
+      context.fillStyle = "#41484c";
       context.fillRect(0, 0, 256, 256);
 
       for (let index = 0; index < 420; index += 1) {
         const seed = seededValue(index * 1187 + 71);
         const x = seededValue(index * 811 + 19) * 256;
         const y = seededValue(index * 577 + 43) * 256;
-        const shade = Math.round(38 + seed * 34);
-        context.fillStyle = `rgba(${shade}, ${shade + 3}, ${shade + 5}, ${0.1 + seed * 0.17})`;
+        const shade = Math.round(48 + seed * 32);
+        context.fillStyle = `rgba(${shade}, ${shade + 4}, ${shade + 6}, ${0.1 + seed * 0.16})`;
         const size = 0.7 + seed * 1.7;
         context.fillRect(x, y, size, size * 0.72);
       }
 
-      context.strokeStyle = "rgba(16, 20, 22, 0.24)";
+      context.strokeStyle = "rgba(24, 28, 30, 0.2)";
       context.lineWidth = 3;
       context.beginPath();
       context.moveTo(16, 192);
@@ -753,6 +753,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const walkways = [];
     const grass = [];
     const zebraStripes = [];
+    const curbSegments = [];
+    const walkwaySet = new Set();
 
     for (let y = 0; y < map.rows; y += 1) {
       for (let x = 0; x < map.cols; x += 1) {
@@ -767,6 +769,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
         if (surface?.type === "walkway") {
           walkways.push({ x, y });
+          walkwaySet.add(`${x},${y}`);
         } else {
           roads.push({ x, y });
         }
@@ -784,6 +787,25 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       }
     }
 
+    walkways.forEach((tile) => {
+      const edges = [
+        { dx: 0, dy: -1, px: tile.x, py: tile.y - 0.47, rotation: 0 },
+        { dx: 1, dy: 0, px: tile.x + 0.47, py: tile.y, rotation: Math.PI / 2 },
+        { dx: 0, dy: 1, px: tile.x, py: tile.y + 0.47, rotation: 0 },
+        { dx: -1, dy: 0, px: tile.x - 0.47, py: tile.y, rotation: Math.PI / 2 }
+      ];
+
+      edges.forEach((edge) => {
+        const neighborKey = `${tile.x + edge.dx},${tile.y + edge.dy}`;
+        if (walkwaySet.has(neighborKey)) return;
+        curbSegments.push({
+          x: edge.px,
+          y: edge.py,
+          rotation: edge.rotation
+        });
+      });
+    });
+
     const surfaceTextures = ensureSurfaceTextures();
     state.tileMaterials = {
       road: cachedMaterial("tile-road", 0x30373d, {
@@ -799,6 +821,10 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       }),
       zebra: cachedMaterial("tile-zebra", 0xf0eee2, {
         roughness: 0.82
+      }),
+      curb: cachedMaterial("tile-curb", 0xc4cac7, {
+        roughness: 0.95,
+        metalness: 0.01
       })
     };
     state.tileMaterials.road.map = surfaceTextures.road;
@@ -810,6 +836,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const walkwayGeometry = new THREE.BoxGeometry(1.015, 0.09, 1.015);
     const grassGeometry = new THREE.BoxGeometry(1.015, 0.075, 1.015);
     const stripeGeometry = new THREE.BoxGeometry(0.62, 0.018, 0.085);
+    const curbGeometry = new THREE.BoxGeometry(1.02, 0.11, 0.12);
 
     createInstancedTiles(roads, roadGeometry, state.tileMaterials.road, 0.012);
     createInstancedTiles(
@@ -819,6 +846,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       0.035
     );
     createInstancedTiles(grass, grassGeometry, state.tileMaterials.grass, 0.022);
+    createInstancedTiles(
+      curbSegments,
+      curbGeometry,
+      state.tileMaterials.curb,
+      0.055
+    );
     createInstancedTiles(
       zebraStripes,
       stripeGeometry,
@@ -3466,39 +3499,49 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     if (state.tileMaterials) {
       const palettes = {
         spring: {
-          road: 0x303a3d,
+          road: 0x3f474b,
           walkway: 0xbcc4be,
-          grass: 0x477644
+          grass: 0x477644,
+          curb: 0xcbd2cf
         },
         summer: {
-          road: 0x393634,
+          road: 0x44403c,
           walkway: 0xc4c0b5,
-          grass: 0x3f7633
+          grass: 0x3f7633,
+          curb: 0xd1cbc0
         },
         autumn: {
-          road: 0x3c3835,
+          road: 0x47423c,
           walkway: 0xbfb09f,
-          grass: 0x706231
+          grass: 0x706231,
+          curb: 0xcbbcab
         },
         winter: {
-          road: 0x505d65,
+          road: 0x5d6971,
           walkway: 0xd9e1e3,
-          grass: 0xaebfc2
+          grass: 0xaebfc2,
+          curb: 0xe1e7e8
         }
       };
       const palette = palettes[seasonId] || palettes.spring;
       const roadColor = new THREE.Color(palette.road)
-        .multiplyScalar(1 - wet * 0.17)
-        .lerp(new THREE.Color(0x2b3b48), night * 0.72);
+        .multiplyScalar(1 - wet * 0.12)
+        .lerp(new THREE.Color(0x364349), night * 0.64);
       const walkwayColor = new THREE.Color(palette.walkway)
         .multiplyScalar(1 - wet * 0.08)
-        .lerp(new THREE.Color(0x596875), night * 0.72);
+        .lerp(new THREE.Color(0x65727d), night * 0.68);
       const grassColor = new THREE.Color(palette.grass)
         .lerp(new THREE.Color(0x23392f), night * 0.72);
+      const curbColor = new THREE.Color(palette.curb)
+        .multiplyScalar(1 - wet * 0.05)
+        .lerp(new THREE.Color(0x78858c), night * 0.42);
 
       state.tileMaterials.road.color.copy(roadColor);
       state.tileMaterials.walkway.color.copy(walkwayColor);
       state.tileMaterials.grass.color.copy(grassColor);
+      if (state.tileMaterials.curb) {
+        state.tileMaterials.curb.color.copy(curbColor);
+      }
       state.tileMaterials.road.emissive.set(0x132330);
       state.tileMaterials.road.emissiveIntensity = night * (0.22 + wet * 0.06);
       state.tileMaterials.walkway.emissive.set(0x1d2d39);
@@ -3507,6 +3550,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       state.tileMaterials.grass.emissiveIntensity = night * 0.08;
       state.tileMaterials.zebra.emissive.set(0x4b493d);
       state.tileMaterials.zebra.emissiveIntensity = night * 0.18;
+      if (state.tileMaterials.curb) {
+        state.tileMaterials.curb.emissive.set(0x202730);
+        state.tileMaterials.curb.emissiveIntensity = night * (0.08 + wet * 0.04);
+        state.tileMaterials.curb.roughness = 0.95 - wet * 0.12;
+        state.tileMaterials.curb.metalness = 0.01 + wet * 0.03;
+      }
       state.tileMaterials.road.roughness = 0.9 - wet * 0.52;
       state.tileMaterials.road.metalness = 0.04 + wet * 0.13;
       state.tileMaterials.walkway.roughness = 0.93 - wet * 0.37;
