@@ -18,13 +18,17 @@
   -webkit-user-select: none;
 }
 
-/* The picker uses a two-step interaction and sits away from the thumb zone. */
+/* The picker sits inside the existing bottom control row. */
 .mobile-control-picker {
-  position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 12px);
-  right: 12px;
+  position: relative;
   z-index: 38;
+  display: none;
+  flex: 0 0 auto;
   pointer-events: auto;
+}
+
+.mobile-control-picker--bottom {
+  margin-left: auto;
 }
 
 .mobile-control-picker__trigger {
@@ -71,8 +75,8 @@
 
 .mobile-control-picker__menu {
   position: absolute;
-  top: calc(100% + 7px);
   right: 0;
+  bottom: calc(100% + 7px);
   width: 158px;
   padding: 6px;
   border: 1px solid rgba(224, 230, 237, 0.38);
@@ -328,6 +332,14 @@
     display: block;
   }
 
+  #gameShell[aria-hidden="false"] .mobile-control-picker {
+    display: block;
+  }
+
+  #gameShell .controls-panel .button-row {
+    align-items: center;
+  }
+
   /* Joystick owns board touches, while the hidden canvas stays inert. */
   #gameShell[data-control-mode="joystick"] .board-wrap {
     touch-action: none;
@@ -370,10 +382,6 @@
     --joystick-size: 108px;
   }
 
-  .mobile-control-picker {
-    top: calc(env(safe-area-inset-top, 0px) + 9px);
-    right: 9px;
-  }
 
   .mobile-arrow-pad {
     grid-template-columns: repeat(3, 49px);

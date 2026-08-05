@@ -22,6 +22,7 @@
   const gameShell = document.getElementById("gameShell");
   const board = document.querySelector("#gameShell .board-wrap");
   const canvas = document.getElementById("gameCanvas");
+  const bottomControlRow = document.querySelector("#gameShell .controls-panel .button-row");
 
   if (!gameShell || !board || !canvas) return;
 
@@ -121,6 +122,11 @@
   const arrowButtons = Array.from(
     controls.querySelectorAll("[data-direction-code]")
   );
+
+  if (bottomControlRow) {
+    picker.classList.add("mobile-control-picker--bottom");
+    bottomControlRow.appendChild(picker);
+  }
 
   let controlMode = readControlMode();
   let hintTimer = 0;
