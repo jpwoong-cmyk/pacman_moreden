@@ -1,136 +1,168 @@
 /* --------------------------------------------------------------------------
-   P.A.C v8.1 mobile joystick
+   P.A.C mobile controls v1.0
+   Dynamic joystick, arrow pad and canvas swipe modes for both 2D and 3D.
    Load after css/mobile.css.
    -------------------------------------------------------------------------- */
 
-.mobile-joystick {
-  --joystick-size: 118px;
+.mobile-controls {
+  --joystick-size: 116px;
+  --joystick-x: 50vw;
+  --joystick-y: 72vh;
   --stick-x: 0px;
   --stick-y: 0px;
 
+  display: none;
+  position: relative;
+  z-index: 34;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The picker uses a two-step interaction and sits away from the thumb zone. */
+.mobile-control-picker {
   position: fixed;
-  left: calc(100vw - 66px);
-  bottom: 58px;
-  z-index: 18;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+  z-index: 38;
+  pointer-events: auto;
+}
+
+.mobile-control-picker__trigger {
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 1px solid rgba(228, 233, 239, 0.46);
+  border-radius: 10px;
+  background: rgba(8, 11, 15, 0.88);
+  color: #f1f4f7;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  touch-action: manipulation;
+}
+
+.mobile-control-picker__caption {
+  color: rgba(221, 226, 232, 0.62);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.mobile-control-picker__current {
+  font-size: 0.72rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.mobile-control-picker__chevron {
+  color: rgba(235, 239, 244, 0.74);
+  transform-origin: center;
+  transition: transform 160ms ease;
+}
+
+.mobile-control-picker.is-open .mobile-control-picker__chevron {
+  transform: rotate(180deg);
+}
+
+.mobile-control-picker__menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  width: 158px;
+  padding: 6px;
+  border: 1px solid rgba(224, 230, 237, 0.38);
+  border-radius: 12px;
+  background: rgba(7, 10, 14, 0.94);
+  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(11px);
+  -webkit-backdrop-filter: blur(11px);
+}
+
+.mobile-control-picker__menu[hidden] {
+  display: none;
+}
+
+.mobile-control-picker__menu button {
+  display: grid;
+  grid-template-columns: 23px 1fr;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 39px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(235, 239, 244, 0.78);
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.mobile-control-picker__menu button + button {
+  margin-top: 3px;
+}
+
+.mobile-control-picker__menu button.is-selected {
+  background: rgba(230, 235, 242, 0.14);
+  color: #ffffff;
+}
+
+.mobile-joystick {
+  position: fixed;
+  left: var(--joystick-x);
+  top: var(--joystick-y);
+  z-index: 35;
   display: none;
   width: var(--joystick-size);
   height: var(--joystick-size);
-  transform: translateX(-50%);
-  transition: left 220ms ease;
+  transform: translate(-50%, -50%) scale(0.88);
+  opacity: 0;
   pointer-events: none;
-  user-select: none;
-  -webkit-user-select: none;
+  transition:
+    opacity 100ms ease,
+    transform 120ms ease;
 }
 
-.mobile-joystick__side-switch {
-  position: absolute;
-  top: 50%;
-  z-index: 3;
-
-  display: grid;
-  place-items: center;
-
-  width: 32px;
-  height: 32px;
-  padding: 0;
-
-  border: 1px solid rgba(225, 231, 238, 0.7);
-  border-radius: 50%;
-
-  background:
-    linear-gradient(
-      145deg,
-      rgba(103, 111, 121, 0.86),
-      rgba(15, 18, 22, 0.92)
-    );
-
-  color: rgba(245, 247, 250, 0.94);
-  font-size: 17px;
-  line-height: 1;
-
-  box-shadow:
-    0 6px 14px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
-
-  transform: translateY(-50%);
-  pointer-events: auto;
-  touch-action: manipulation;
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.mobile-joystick__side-switch:active {
-  transform:
-    translateY(-50%)
-    scale(0.92);
-
-  background:
-    linear-gradient(
-      145deg,
-      rgba(137, 146, 157, 0.9),
-      rgba(21, 25, 30, 0.96)
-    );
-}
-
-/* Joystick on the right means the switch appears on its left. */
-.mobile-joystick[data-side="right"]
-.mobile-joystick__side-switch {
-  left: auto;
-  right: calc(100% + 10px);
-}
-
-/* Joystick on the left means the switch appears on its right. */
-.mobile-joystick[data-side="left"]
-.mobile-joystick__side-switch {
-  left: calc(100% + 10px);
-  right: auto;
+.mobile-joystick.is-visible {
+  display: block;
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
 }
 
 .mobile-joystick__base {
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(222, 228, 235, 0.75);
+  border: 1px solid rgba(225, 231, 238, 0.75);
   border-radius: 50%;
   background:
     radial-gradient(
       circle at 34% 27%,
-      rgba(242, 246, 250, 0.22) 0 8%,
-      rgba(94, 101, 110, 0.28) 31%,
-      rgba(13, 16, 20, 0.75) 63%,
-      rgba(0, 0, 0, 0.75) 100%
+      rgba(244, 247, 251, 0.24) 0 8%,
+      rgba(92, 100, 110, 0.36) 31%,
+      rgba(13, 16, 20, 0.8) 64%,
+      rgba(0, 0, 0, 0.82) 100%
     );
   box-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.42),
-    inset 0 0 0 6px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+    0 13px 28px rgba(0, 0, 0, 0.46),
+    inset 0 0 0 6px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
   backdrop-filter: blur(7px);
   -webkit-backdrop-filter: blur(7px);
-  pointer-events: auto;
-  touch-action: none;
-  cursor: grab;
-}
-
-.mobile-joystick__base:active,
-.mobile-joystick.is-active .mobile-joystick__base {
-  cursor: grabbing;
-  border-color: rgba(244, 247, 251, 0.92);
-  box-shadow:
-    0 14px 32px rgba(0, 0, 0, 0.5),
-    0 0 16px rgba(205, 214, 224, 0.22),
-    inset 0 0 0 6px rgba(0, 0, 0, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.36);
 }
 
 .mobile-joystick__ring {
   position: absolute;
   inset: 13%;
-  border: 1px solid rgba(198, 207, 218, 0.28);
+  border: 1px solid rgba(198, 207, 218, 0.3);
   border-radius: 50%;
   box-shadow:
-    inset 0 0 13px rgba(0, 0, 0, 0.5),
+    inset 0 0 13px rgba(0, 0, 0, 0.52),
     0 0 8px rgba(235, 239, 244, 0.08);
-  pointer-events: none;
 }
 
 .mobile-joystick__stick {
@@ -139,48 +171,34 @@
   top: 50%;
   width: 47%;
   aspect-ratio: 1;
-  border: 1px solid rgba(242, 245, 249, 0.82);
+  border: 1px solid rgba(242, 245, 249, 0.84);
   border-radius: 50%;
   background:
     linear-gradient(
       145deg,
-      rgba(239, 243, 247, 0.86) 0%,
-      rgba(119, 126, 136, 0.82) 28%,
-      rgba(31, 35, 41, 0.88) 61%,
-      rgba(2, 4, 6, 0.92) 100%
+      rgba(239, 243, 247, 0.9) 0%,
+      rgba(119, 126, 136, 0.84) 28%,
+      rgba(31, 35, 41, 0.92) 61%,
+      rgba(2, 4, 6, 0.96) 100%
     );
   box-shadow:
-    0 8px 14px rgba(0, 0, 0, 0.5),
-    inset 0 2px 3px rgba(255, 255, 255, 0.35),
-    inset 0 -3px 5px rgba(0, 0, 0, 0.52);
+    0 8px 14px rgba(0, 0, 0, 0.52),
+    inset 0 2px 3px rgba(255, 255, 255, 0.38),
+    inset 0 -3px 5px rgba(0, 0, 0, 0.54);
   transform:
     translate(
       calc(-50% + var(--stick-x)),
       calc(-50% + var(--stick-y))
     );
-  transition:
-    transform 75ms ease-out,
-    box-shadow 120ms ease;
   will-change: transform;
-  pointer-events: none;
-}
-
-.mobile-joystick.is-active .mobile-joystick__stick {
-  transition: none;
-  box-shadow:
-    0 9px 17px rgba(0, 0, 0, 0.56),
-    0 0 14px rgba(222, 228, 236, 0.22),
-    inset 0 2px 3px rgba(255, 255, 255, 0.42),
-    inset 0 -3px 5px rgba(0, 0, 0, 0.58);
 }
 
 .mobile-joystick__arrow {
   position: absolute;
-  color: rgba(229, 234, 240, 0.58);
+  color: rgba(229, 234, 240, 0.62);
   font-size: 0.55rem;
   line-height: 1;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
-  pointer-events: none;
 }
 
 .mobile-joystick__arrow--up {
@@ -207,42 +225,187 @@
   transform: translateY(-50%) rotate(-90deg);
 }
 
-/* Mobile movement now belongs to the joystick, not canvas swipes. */
+.mobile-arrow-pad {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  z-index: 35;
+  display: none;
+  grid-template-columns: repeat(3, 54px);
+  grid-template-rows: repeat(3, 54px);
+  gap: 5px;
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+.mobile-arrow-pad button,
+.mobile-arrow-pad__centre {
+  border-radius: 14px;
+}
+
+.mobile-arrow-pad button {
+  border: 1px solid rgba(226, 232, 239, 0.62);
+  background:
+    linear-gradient(
+      145deg,
+      rgba(121, 130, 141, 0.83),
+      rgba(15, 18, 23, 0.94)
+    );
+  color: rgba(249, 251, 253, 0.96);
+  font-size: 1.15rem;
+  box-shadow:
+    0 7px 15px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  touch-action: none;
+}
+
+.mobile-arrow-pad button.is-pressed,
+.mobile-arrow-pad button:active {
+  transform: translateY(2px) scale(0.96);
+  background:
+    linear-gradient(
+      145deg,
+      rgba(166, 176, 188, 0.9),
+      rgba(28, 33, 40, 0.97)
+    );
+}
+
+.mobile-arrow-pad button[data-direction-code="ArrowUp"] {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.mobile-arrow-pad button[data-direction-code="ArrowLeft"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.mobile-arrow-pad__centre {
+  grid-column: 2;
+  grid-row: 2;
+  border: 1px solid rgba(193, 202, 212, 0.22);
+  background: rgba(7, 10, 13, 0.66);
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.5);
+}
+
+.mobile-arrow-pad button[data-direction-code="ArrowRight"] {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.mobile-arrow-pad button[data-direction-code="ArrowDown"] {
+  grid-column: 2;
+  grid-row: 3;
+}
+
+.mobile-control-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 18px);
+  z-index: 33;
+  display: none;
+  margin: 0;
+  padding: 7px 11px;
+  border: 1px solid rgba(226, 231, 237, 0.3);
+  border-radius: 999px;
+  background: rgba(7, 10, 14, 0.76);
+  color: rgba(240, 243, 247, 0.82);
+  font-size: 0.68rem;
+  letter-spacing: 0.035em;
+  transform: translateX(-50%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+  white-space: nowrap;
+}
+
+.mobile-controls.show-control-hint .mobile-control-hint {
+  opacity: 1;
+}
+
 @media (max-width: 950px) and (pointer: coarse) {
-  #gameShell[aria-hidden="false"] .mobile-joystick {
+  #gameShell[aria-hidden="false"] .mobile-controls {
     display: block;
   }
 
-  #gameShell #gameCanvas {
+  /* Joystick owns board touches, while the hidden canvas stays inert. */
+  #gameShell[data-control-mode="joystick"] .board-wrap {
+    touch-action: none;
+  }
+
+  #gameShell[data-control-mode="joystick"] #gameCanvas,
+  #gameShell[data-control-mode="arrows"] #gameCanvas {
     pointer-events: none;
   }
 
-  #gameShell .swipe-hint {
+  #gameShell[data-control-mode="swipe"] #gameCanvas {
+    pointer-events: auto;
+    touch-action: none;
+  }
+
+  #gameShell[data-control-mode="arrows"] .mobile-arrow-pad {
+    display: grid;
+  }
+
+  #gameShell[data-control-mode="joystick"]
+  .mobile-controls.show-control-hint
+  .mobile-control-hint--joystick,
+  #gameShell[data-control-mode="swipe"]
+  .mobile-controls.show-control-hint
+  .mobile-control-hint--swipe {
+    display: block;
+  }
+
+  #gameShell[data-control-mode="swipe"] .swipe-hint {
+    display: flex !important;
+  }
+
+  #gameShell:not([data-control-mode="swipe"]) .swipe-hint {
     display: none !important;
   }
 }
 
 @media (max-width: 420px) and (pointer: coarse) {
-  .mobile-joystick {
+  .mobile-controls {
     --joystick-size: 108px;
+  }
+
+  .mobile-control-picker {
+    top: calc(env(safe-area-inset-top, 0px) + 9px);
+    right: 9px;
+  }
+
+  .mobile-arrow-pad {
+    grid-template-columns: repeat(3, 49px);
+    grid-template-rows: repeat(3, 49px);
   }
 }
 
 @media (
   orientation: landscape
 ) and (max-width: 950px) and (max-height: 600px) and (pointer: coarse) {
-  .mobile-joystick {
-    --joystick-size: 92px;
+  .mobile-controls {
+    --joystick-size: 94px;
   }
 
-  .mobile-joystick__arrow {
-    font-size: 0.48rem;
+  .mobile-arrow-pad {
+    right: calc(env(safe-area-inset-right, 0px) + 18px);
+    left: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+    grid-template-columns: repeat(3, 43px);
+    grid-template-rows: repeat(3, 43px);
+    transform: none;
+  }
+
+  .mobile-control-hint {
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .mobile-joystick,
-  .mobile-joystick__stick {
+  .mobile-control-picker__chevron,
+  .mobile-control-hint {
     transition: none;
   }
 }

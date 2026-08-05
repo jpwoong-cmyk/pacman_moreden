@@ -2,7 +2,10 @@
   "use strict";
 
   const MOBILE_QUERY = "(max-width: 950px) and (pointer: coarse)";
-  const JOYSTICK_SIDE_KEY = "pacJoystickSide";
+  const CONTROL_MODE_KEY = "pacControlMode";
+  const DEFAULT_MODE = "joystick";
+  const VALID_MODES = new Set(["joystick", "arrows", "swipe"]);
+
   const DIRECTION_BY_CODE = Object.freeze({
     ArrowUp: { x: 0, y: -1 },
     ArrowRight: { x: 1, y: 0 },
@@ -10,99 +13,136 @@
     ArrowLeft: { x: -1, y: 0 }
   });
 
+  const MODE_LABELS = Object.freeze({
+    joystick: "Joystick",
+    arrows: "Arrow Pad",
+    swipe: "Swipe"
+  });
+
   const gameShell = document.getElementById("gameShell");
-  const leaveRoomButton = document.getElementById("leaveRoomButton");
+  const board = document.querySelector("#gameShell .board-wrap");
+  const canvas = document.getElementById("gameCanvas");
 
-  if (!gameShell || !leaveRoomButton) return;
+  if (!gameShell || !board || !canvas) return;
 
-  const joystick = document.createElement("div");
-  joystick.id = "mobileJoystick";
-  joystick.className = "mobile-joystick";
-  joystick.setAttribute("aria-hidden", "false");
-
-  joystick.innerHTML = `
-    <button
-      class="mobile-joystick__side-switch"
-      type="button"
-      aria-label="Move joystick to left side"
-      title="Move joystick to left side"
-    >
-      ⇆
-    </button>
-
-    <div
-      class="mobile-joystick__base"
-      role="application"
-      tabindex="0"
-      aria-label="Movement joystick. Drag up, down, left, or right."
-    >
-      <span class="mobile-joystick__ring" aria-hidden="true"></span>
-      <span class="mobile-joystick__arrow mobile-joystick__arrow--up" aria-hidden="true">▲</span>
-      <span class="mobile-joystick__arrow mobile-joystick__arrow--right" aria-hidden="true">▲</span>
-      <span class="mobile-joystick__arrow mobile-joystick__arrow--down" aria-hidden="true">▲</span>
-      <span class="mobile-joystick__arrow mobile-joystick__arrow--left" aria-hidden="true">▲</span>
-      <span class="mobile-joystick__stick" aria-hidden="true"></span>
-    </div>
-  `;
-
-  gameShell.appendChild(joystick);
-
-  const base = joystick.querySelector(".mobile-joystick__base");
-  const sideSwitch = joystick.querySelector(
-    ".mobile-joystick__side-switch"
-  );
   const mobileMedia = window.matchMedia(MOBILE_QUERY);
 
-  function readJoystickSide() {
+  function readControlMode() {
     try {
-      return localStorage.getItem(JOYSTICK_SIDE_KEY) === "left"
-        ? "left"
-        : "right";
+      const saved = window.localStorage.getItem(CONTROL_MODE_KEY);
+      return VALID_MODES.has(saved) ? saved : DEFAULT_MODE;
     } catch (_error) {
-      return "right";
+      return DEFAULT_MODE;
     }
   }
 
-  let joystickSide = readJoystickSide();
+  function saveControlMode(mode) {
+    try {
+      window.localStorage.setItem(CONTROL_MODE_KEY, mode);
+    } catch (_error) {
+      // The selected mode remains active for this session.
+    }
+  }
+
+  const controls = document.createElement("div");
+  controls.id = "mobileControls";
+  controls.className = "mobile-controls";
+  controls.innerHTML = `
+    <div class="mobile-control-picker">
+      <button
+        class="mobile-control-picker__trigger"
+        type="button"
+        aria-expanded="false"
+        aria-controls="mobileControlMenu"
+      >
+        <span class="mobile-control-picker__caption">CONTROL</span>
+        <strong class="mobile-control-picker__current">Joystick</strong>
+        <span class="mobile-control-picker__chevron" aria-hidden="true">▾</span>
+      </button>
+
+      <div id="mobileControlMenu" class="mobile-control-picker__menu" hidden>
+        <button type="button" data-control-choice="joystick" aria-pressed="true">
+          <span aria-hidden="true">◉</span>
+          <span>Joystick</span>
+        </button>
+        <button type="button" data-control-choice="arrows" aria-pressed="false">
+          <span aria-hidden="true">✥</span>
+          <span>Arrow Pad</span>
+        </button>
+        <button type="button" data-control-choice="swipe" aria-pressed="false">
+          <span aria-hidden="true">↔</span>
+          <span>Swipe</span>
+        </button>
+      </div>
+    </div>
+
+    <div
+      id="mobileJoystick"
+      class="mobile-joystick mobile-joystick--dynamic"
+      aria-hidden="true"
+    >
+      <div class="mobile-joystick__base" aria-hidden="true">
+        <span class="mobile-joystick__ring"></span>
+        <span class="mobile-joystick__arrow mobile-joystick__arrow--up">▲</span>
+        <span class="mobile-joystick__arrow mobile-joystick__arrow--right">▲</span>
+        <span class="mobile-joystick__arrow mobile-joystick__arrow--down">▲</span>
+        <span class="mobile-joystick__arrow mobile-joystick__arrow--left">▲</span>
+        <span class="mobile-joystick__stick"></span>
+      </div>
+    </div>
+
+    <div class="mobile-arrow-pad" aria-label="Movement arrow pad">
+      <button type="button" data-direction-code="ArrowUp" aria-label="Move up">▲</button>
+      <button type="button" data-direction-code="ArrowLeft" aria-label="Move left">◀</button>
+      <span class="mobile-arrow-pad__centre" aria-hidden="true"></span>
+      <button type="button" data-direction-code="ArrowRight" aria-label="Move right">▶</button>
+      <button type="button" data-direction-code="ArrowDown" aria-label="Move down">▼</button>
+    </div>
+
+    <p class="mobile-control-hint mobile-control-hint--joystick" aria-hidden="true">
+      Press and drag anywhere on the city
+    </p>
+    <p class="mobile-control-hint mobile-control-hint--swipe" aria-hidden="true">
+      Swipe anywhere on the city to turn
+    </p>
+  `;
+
+  gameShell.appendChild(controls);
+
+  const picker = controls.querySelector(".mobile-control-picker");
+  const pickerTrigger = controls.querySelector(".mobile-control-picker__trigger");
+  const pickerCurrent = controls.querySelector(".mobile-control-picker__current");
+  const pickerMenu = controls.querySelector(".mobile-control-picker__menu");
+  const choiceButtons = Array.from(
+    controls.querySelectorAll("[data-control-choice]")
+  );
+  const joystick = controls.querySelector(".mobile-joystick");
+  const joystickBase = controls.querySelector(".mobile-joystick__base");
+  const arrowButtons = Array.from(
+    controls.querySelectorAll("[data-direction-code]")
+  );
+
+  let controlMode = readControlMode();
+  let hintTimer = 0;
 
   const pointer = {
     active: false,
     id: null,
+    baseX: 0,
+    baseY: 0,
     lastCode: ""
   };
 
-  let positionFrame = 0;
-
-  function applyJoystickSide(side, persist = true) {
-    joystickSide = side === "left" ? "left" : "right";
-    joystick.dataset.side = joystickSide;
-
-    const nextSide = joystickSide === "right" ? "left" : "right";
-    const label = `Move joystick to ${nextSide} side`;
-
-    sideSwitch.setAttribute("aria-label", label);
-    sideSwitch.title = label;
-
-    if (persist) {
-      try {
-        localStorage.setItem(JOYSTICK_SIDE_KEY, joystickSide);
-      } catch (_error) {
-        // Continue without saving when storage is unavailable.
-      }
-    }
-
-    positionJoystick();
+  function isGameVisible() {
+    return gameShell.getAttribute("aria-hidden") === "false";
   }
 
-  function isMobileJoystickActive() {
-    return mobileMedia.matches &&
-      gameShell.getAttribute("aria-hidden") === "false";
+  function isMobileControlsActive() {
+    return mobileMedia.matches && isGameVisible();
   }
 
   function dispatchDirection(code) {
-    if (!DIRECTION_BY_CODE[code] || code === pointer.lastCode) return;
-
-    pointer.lastCode = code;
+    if (!DIRECTION_BY_CODE[code]) return false;
 
     window.dispatchEvent(
       new KeyboardEvent("keydown", {
@@ -114,10 +154,11 @@
     );
 
     if (navigator.vibrate) navigator.vibrate(7);
+    return true;
   }
 
   function resolveDirection(dx, dy, radius) {
-    const deadZone = radius * 0.2;
+    const deadZone = radius * 0.18;
     if (Math.hypot(dx, dy) < deadZone) return "";
 
     if (Math.abs(dx) > Math.abs(dy)) {
@@ -127,9 +168,34 @@
     return dy > 0 ? "ArrowDown" : "ArrowUp";
   }
 
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function boardBounds() {
+    const rect = board.getBoundingClientRect();
+    const half = Math.max(46, joystick.offsetWidth * 0.5 || 56);
+
+    return {
+      left: rect.left + half,
+      right: rect.right - half,
+      top: rect.top + half,
+      bottom: rect.bottom - half
+    };
+  }
+
+  function setJoystickCentre(x, y) {
+    const bounds = boardBounds();
+    pointer.baseX = clamp(x, bounds.left, Math.max(bounds.left, bounds.right));
+    pointer.baseY = clamp(y, bounds.top, Math.max(bounds.top, bounds.bottom));
+
+    joystick.style.setProperty("--joystick-x", `${pointer.baseX}px`);
+    joystick.style.setProperty("--joystick-y", `${pointer.baseY}px`);
+  }
+
   function setStickPosition(dx, dy) {
-    const rect = base.getBoundingClientRect();
-    const maxTravel = rect.width * 0.255;
+    const rect = joystickBase.getBoundingClientRect();
+    const maxTravel = Math.max(24, rect.width * 0.27);
     const length = Math.hypot(dx, dy);
     const scale = length > maxTravel ? maxTravel / length : 1;
 
@@ -137,153 +203,244 @@
     joystick.style.setProperty("--stick-y", `${dy * scale}px`);
   }
 
-  function updateFromPointer(event) {
+  function updateDynamicJoystick(event) {
     if (!pointer.active || event.pointerId !== pointer.id) return;
 
-    const rect = base.getBoundingClientRect();
-    const centreX = rect.left + rect.width / 2;
-    const centreY = rect.top + rect.height / 2;
-    const dx = event.clientX - centreX;
-    const dy = event.clientY - centreY;
+    let dx = event.clientX - pointer.baseX;
+    let dy = event.clientY - pointer.baseY;
+    const length = Math.hypot(dx, dy);
+    const followRadius = Math.max(52, joystickBase.offsetWidth * 0.58);
+
+    /*
+     * A floating joystick should not leave the thumb stranded at the edge.
+     * Once the drag exceeds the follow radius, the base glides after the
+     * finger while preserving the movement direction.
+     */
+    if (length > followRadius) {
+      const excess = length - followRadius;
+      setJoystickCentre(
+        pointer.baseX + (dx / length) * excess,
+        pointer.baseY + (dy / length) * excess
+      );
+      dx = event.clientX - pointer.baseX;
+      dy = event.clientY - pointer.baseY;
+    }
 
     setStickPosition(dx, dy);
 
-    const code = resolveDirection(dx, dy, rect.width / 2);
-    if (code) dispatchDirection(code);
+    const code = resolveDirection(
+      dx,
+      dy,
+      Math.max(50, joystickBase.offsetWidth * 0.5)
+    );
+
+    if (code && code !== pointer.lastCode) {
+      pointer.lastCode = code;
+      dispatchDirection(code);
+    }
   }
 
-  function resetJoystick() {
+  function resetDynamicJoystick() {
     pointer.active = false;
     pointer.id = null;
     pointer.lastCode = "";
-    joystick.classList.remove("is-active");
+    joystick.classList.remove("is-visible", "is-active");
+    joystick.setAttribute("aria-hidden", "true");
     joystick.style.setProperty("--stick-x", "0px");
     joystick.style.setProperty("--stick-y", "0px");
   }
 
-  function positionJoystick() {
-    window.cancelAnimationFrame(positionFrame);
+  function isProtectedTouchTarget(target) {
+    if (!(target instanceof Element)) return false;
 
-    positionFrame = window.requestAnimationFrame(() => {
-      const buttonRect = leaveRoomButton.getBoundingClientRect();
-
-      const viewportWidth =
-        window.visualViewport?.width ||
-        document.documentElement.clientWidth ||
-        window.innerWidth;
-
-      const viewportHeight =
-        window.visualViewport?.height ||
-        document.documentElement.clientHeight ||
-        window.innerHeight;
-
-      if (buttonRect.width <= 0 || buttonRect.height <= 0) return;
-
-      const distanceBelowButton = Math.max(
-        0,
-        viewportHeight - buttonRect.bottom
-      );
-
-      const bottom =
-        distanceBelowButton +
-        buttonRect.height +
-        20;
-
-      const joystickRadius = joystick.offsetWidth / 2;
-      const edgeSpacing = 18;
-
-      const horizontalCentre = viewportWidth * 0.5;
-
-      joystick.style.left = `${horizontalCentre}px`;
-      joystick.style.bottom = `${bottom}px`;
-    });
+    return Boolean(
+      target.closest(
+        [
+          "button",
+          "a",
+          "input",
+          "select",
+          "textarea",
+          "[contenteditable='true']",
+          ".game-overlay",
+          ".powerup-hud",
+          ".coop-team-hud",
+          ".network-latency",
+          ".season-status",
+          ".mobile-control-picker"
+        ].join(",")
+      )
+    );
   }
 
-  sideSwitch.addEventListener("pointerdown", (event) => {
-    event.stopPropagation();
-  });
-
-  sideSwitch.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    resetJoystick();
-
-    applyJoystickSide(
-      joystickSide === "right" ? "left" : "right"
-    );
-
-    if (navigator.vibrate) {
-      navigator.vibrate(12);
+  function beginDynamicJoystick(event) {
+    if (
+      controlMode !== "joystick" ||
+      !isMobileControlsActive() ||
+      pointer.active ||
+      isProtectedTouchTarget(event.target)
+    ) {
+      return;
     }
-  });
 
-  base.addEventListener("pointerdown", (event) => {
-    if (!isMobileJoystickActive()) return;
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
 
     event.preventDefault();
+    event.stopPropagation();
+
     pointer.active = true;
     pointer.id = event.pointerId;
     pointer.lastCode = "";
-    joystick.classList.add("is-active");
-    base.setPointerCapture?.(event.pointerId);
-    updateFromPointer(event);
-  });
 
-  base.addEventListener("pointermove", (event) => {
-    if (!pointer.active) return;
-    event.preventDefault();
-    updateFromPointer(event);
-  });
+    setJoystickCentre(event.clientX, event.clientY);
+    joystick.style.setProperty("--stick-x", "0px");
+    joystick.style.setProperty("--stick-y", "0px");
+    joystick.classList.add("is-visible", "is-active");
+    joystick.setAttribute("aria-hidden", "false");
 
-  function finishPointer(event) {
-    if (!pointer.active || event.pointerId !== pointer.id) return;
-    event.preventDefault();
-    base.releasePointerCapture?.(event.pointerId);
-    resetJoystick();
+    board.setPointerCapture?.(event.pointerId);
   }
 
-  base.addEventListener("pointerup", finishPointer);
-  base.addEventListener("pointercancel", finishPointer);
-  base.addEventListener("lostpointercapture", resetJoystick);
-
-  base.addEventListener("keydown", (event) => {
-    if (!DIRECTION_BY_CODE[event.code]) return;
+  function moveDynamicJoystick(event) {
+    if (!pointer.active || event.pointerId !== pointer.id) return;
     event.preventDefault();
-    dispatchDirection(event.code);
+    event.stopPropagation();
+    updateDynamicJoystick(event);
+  }
+
+  function finishDynamicJoystick(event) {
+    if (!pointer.active || event.pointerId !== pointer.id) return;
+    event.preventDefault();
+    event.stopPropagation();
+    board.releasePointerCapture?.(event.pointerId);
+    resetDynamicJoystick();
+  }
+
+  function setPickerOpen(open) {
+    const next = Boolean(open);
+    picker.classList.toggle("is-open", next);
+    pickerTrigger.setAttribute("aria-expanded", String(next));
+    pickerMenu.hidden = !next;
+  }
+
+  function showModeHint() {
+    window.clearTimeout(hintTimer);
+    controls.classList.add("show-control-hint");
+    hintTimer = window.setTimeout(() => {
+      controls.classList.remove("show-control-hint");
+    }, 1900);
+  }
+
+  function applyControlMode(mode, options = {}) {
+    const nextMode = VALID_MODES.has(mode) ? mode : DEFAULT_MODE;
+    controlMode = nextMode;
+
+    resetDynamicJoystick();
+    gameShell.dataset.controlMode = nextMode;
+    controls.dataset.mode = nextMode;
+    pickerCurrent.textContent = MODE_LABELS[nextMode];
+
+    choiceButtons.forEach((button) => {
+      const selected = button.dataset.controlChoice === nextMode;
+      button.classList.toggle("is-selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+
+    setPickerOpen(false);
+
+    if (options.persist !== false) saveControlMode(nextMode);
+    if (options.announce !== false && isMobileControlsActive()) showModeHint();
+
+    document.dispatchEvent(
+      new CustomEvent("pacman:mobile-control-mode-changed", {
+        detail: { mode: nextMode }
+      })
+    );
+  }
+
+  pickerTrigger.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setPickerOpen(pickerMenu.hidden);
   });
 
-  window.addEventListener("resize", positionJoystick, { passive: true });
+  choiceButtons.forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      applyControlMode(button.dataset.controlChoice);
+      if (navigator.vibrate) navigator.vibrate(12);
+    });
+  });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!picker.contains(event.target)) setPickerOpen(false);
+  });
+
+  /* Capture phase prevents the original canvas swipe listener firing in joystick mode. */
+  board.addEventListener("pointerdown", beginDynamicJoystick, {
+    capture: true,
+    passive: false
+  });
+  board.addEventListener("pointermove", moveDynamicJoystick, {
+    capture: true,
+    passive: false
+  });
+  board.addEventListener("pointerup", finishDynamicJoystick, {
+    capture: true,
+    passive: false
+  });
+  board.addEventListener("pointercancel", finishDynamicJoystick, {
+    capture: true,
+    passive: false
+  });
+  board.addEventListener("lostpointercapture", resetDynamicJoystick);
+
+  arrowButtons.forEach((button) => {
+    button.addEventListener("pointerdown", (event) => {
+      if (controlMode !== "arrows" || !isMobileControlsActive()) return;
+      event.preventDefault();
+      event.stopPropagation();
+      button.classList.add("is-pressed");
+      dispatchDirection(button.dataset.directionCode);
+    });
+
+    const release = () => button.classList.remove("is-pressed");
+    button.addEventListener("pointerup", release);
+    button.addEventListener("pointercancel", release);
+    button.addEventListener("lostpointercapture", release);
+  });
+
+  function refreshVisibility() {
+    if (!isMobileControlsActive()) {
+      resetDynamicJoystick();
+      setPickerOpen(false);
+    }
+  }
+
+  window.addEventListener("resize", refreshVisibility, { passive: true });
   window.addEventListener("orientationchange", () => {
-    resetJoystick();
-    window.setTimeout(positionJoystick, 80);
+    resetDynamicJoystick();
+    setPickerOpen(false);
   }, { passive: true });
 
-  window.visualViewport?.addEventListener("resize", positionJoystick, {
-    passive: true
-  });
+  mobileMedia.addEventListener?.("change", refreshVisibility);
 
-  mobileMedia.addEventListener?.("change", () => {
-    resetJoystick();
-    positionJoystick();
-  });
-
-  const gameVisibilityObserver = new MutationObserver(() => {
-    resetJoystick();
-    positionJoystick();
-  });
-
-  gameVisibilityObserver.observe(gameShell, {
+  const visibilityObserver = new MutationObserver(refreshVisibility);
+  visibilityObserver.observe(gameShell, {
     attributes: true,
     attributeFilter: ["aria-hidden"]
   });
 
   document.addEventListener("pacman:room-started", () => {
-    window.setTimeout(positionJoystick, 80);
+    refreshVisibility();
+    showModeHint();
   });
+  document.addEventListener("pacman:room-left", resetDynamicJoystick);
+  document.addEventListener("pacman:room-closed", resetDynamicJoystick);
 
-  document.addEventListener("pacman:room-left", resetJoystick);
-  document.addEventListener("pacman:room-closed", resetJoystick);
-
-  applyJoystickSide(joystickSide, false);
+  applyControlMode(controlMode, {
+    persist: false,
+    announce: false
+  });
 })();
