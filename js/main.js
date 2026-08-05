@@ -1,9 +1,9 @@
 (function () {
   "use strict";
 
-  const POSITION_BROADCAST_INTERVAL = 1 / 8;
-  const WORLD_FRAME_INTERVAL = 1 / 8;
-  const WORLD_SNAPSHOT_INTERVAL = 5;
+  const POSITION_BROADCAST_INTERVAL = 1 / 4;
+  const WORLD_FRAME_INTERVAL = 1 / 3;
+  const WORLD_SNAPSHOT_INTERVAL = 7;
   const WORLD_SAVE_INTERVAL = 15;
   const STARTING_PELLET_COUNT = 180;
   const BASE_PACMAN_SPEED = 5.8;
