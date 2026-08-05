@@ -4,7 +4,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
   "use strict";
 
   const MAX_COINS = 260;
-  const MAX_SEASON_PARTICLES = 72;
+  const MAX_SEASON_PARTICLES = 96;
+  const MAX_WEATHER_RAIN_DROPS = 96;
+  const MAX_SNOW_PATCHES = 360;
   const LOCAL_VISIBLE_GRACE_MS = 140;
   const CAMERA_LERP = 0.09;
   const MATERIAL_EPSILON = 0.0001;
@@ -70,6 +72,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     seasonPoints: null,
     seasonPositions: null,
     seasonSeeds: [],
+    rainLines: null,
+    rainPositions: null,
+    rainSeeds: [],
+    snowPatchMesh: null,
+    snowPatchMaterial: null,
+    surfaceTextures: null,
     materialCache: new Map(),
     tileMaterials: null,
     currentEnvironment: null,
@@ -111,6 +119,19 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     if (edge0 === edge1) return value < edge0 ? 0 : 1;
     const x = clamp((value - edge0) / (edge1 - edge0), 0, 1);
     return x * x * (3 - 2 * x);
+  }
+
+  function normalizedSeed(value) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return (Math.trunc(numeric) >>> 0) || 1;
+
+    const sourceValue = String(value || "pac-three-weather");
+    let hash = 2166136261;
+    for (let index = 0; index < sourceValue.length; index += 1) {
+      hash ^= sourceValue.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0) || 1;
   }
 
   function seededValue(value) {
@@ -511,6 +532,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     state.lights.add(state.ambientLight, state.sunLight);
 
     createSeasonParticles();
+    createWeatherRain();
     resizeRenderer();
 
     if (window.ResizeObserver) {
@@ -558,8 +580,164 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     return mesh;
   }
 
+  function createSurfaceTexture(kind) {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const context = canvas.getContext("2d");
+
+    if (kind === "road") {
+      context.fillStyle = "#353c40";
+      context.fillRect(0, 0, 256, 256);
+
+      for (let index = 0; index < 420; index += 1) {
+        const seed = seededValue(index * 1187 + 71);
+        const x = seededValue(index * 811 + 19) * 256;
+        const y = seededValue(index * 577 + 43) * 256;
+        const shade = Math.round(38 + seed * 34);
+        context.fillStyle = `rgba(${shade}, ${shade + 3}, ${shade + 5}, ${0.1 + seed * 0.17})`;
+        const size = 0.7 + seed * 1.7;
+        context.fillRect(x, y, size, size * 0.72);
+      }
+
+      context.strokeStyle = "rgba(16, 20, 22, 0.24)";
+      context.lineWidth = 3;
+      context.beginPath();
+      context.moveTo(16, 192);
+      context.bezierCurveTo(78, 166, 148, 208, 240, 176);
+      context.stroke();
+    } else {
+      context.fillStyle = "#b9c0bc";
+      context.fillRect(0, 0, 256, 256);
+      context.strokeStyle = "rgba(70, 79, 81, 0.28)";
+      context.lineWidth = 2;
+
+      const rowHeight = 64;
+      const blockWidth = 96;
+      for (let row = 0; row <= 4; row += 1) {
+        const y = row * rowHeight;
+        context.beginPath();
+        context.moveTo(0, y);
+        context.lineTo(256, y);
+        context.stroke();
+      }
+
+      for (let row = 0; row < 4; row += 1) {
+        const offset = row % 2 === 0 ? 0 : -blockWidth * 0.5;
+        for (let column = -1; column < 4; column += 1) {
+          const x = offset + column * blockWidth;
+          context.beginPath();
+          context.moveTo(x, row * rowHeight);
+          context.lineTo(x, (row + 1) * rowHeight);
+          context.stroke();
+        }
+      }
+
+      context.fillStyle = "rgba(242, 239, 213, 0.2)";
+      context.fillRect(0, 0, 8, 256);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.anisotropy = Math.min(
+      4,
+      state.renderer?.capabilities?.getMaxAnisotropy?.() || 1
+    );
+    return texture;
+  }
+
+  function ensureSurfaceTextures() {
+    if (state.surfaceTextures) return state.surfaceTextures;
+    state.surfaceTextures = {
+      road: createSurfaceTexture("road"),
+      walkway: createSurfaceTexture("walkway")
+    };
+    return state.surfaceTextures;
+  }
+
+  function buildSnowPatches(map, grassTiles, walkwayTiles, roadTiles) {
+    disposeObject(state.snowPatchMesh);
+    state.snowPatchMesh = null;
+
+    const candidates = [];
+    const addCandidate = (tile, surfaceType, index) => {
+      const seed = seededValue(
+        normalizedSeed(map.roomSeed) +
+        tile.x * 811 +
+        tile.y * 577 +
+        index * 131 +
+        surfaceType.length * 97
+      );
+      const threshold = surfaceType === "road" ? 0.9 : 0.58;
+      if (seed < threshold) return;
+      candidates.push({
+        ...tile,
+        surfaceType,
+        seed
+      });
+    };
+
+    grassTiles.forEach((tile, index) => addCandidate(tile, "grass", index));
+    walkwayTiles.forEach((tile, index) => addCandidate(tile, "walkway", index));
+    roadTiles.forEach((tile, index) => addCandidate(tile, "road", index));
+
+    const selected = candidates.slice(0, MAX_SNOW_PATCHES);
+    if (!selected.length) return;
+
+    const geometry = new THREE.CircleGeometry(0.38, 12);
+    geometry.rotateX(-Math.PI / 2);
+    const material = new THREE.MeshStandardMaterial({
+      color: 0xeef5f6,
+      roughness: 0.94,
+      metalness: 0.01,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    });
+    material.userData.pacWeatherSnow = true;
+
+    const mesh = new THREE.InstancedMesh(
+      geometry,
+      material,
+      selected.length
+    );
+    const dummy = new THREE.Object3D();
+
+    selected.forEach((patch, index) => {
+      const offsetX = (seededValue(index * 733 + patch.x * 29) - 0.5) * 0.45;
+      const offsetZ = (seededValue(index * 997 + patch.y * 31) - 0.5) * 0.45;
+      const baseY = patch.surfaceType === "walkway"
+        ? 0.095
+        : patch.surfaceType === "road"
+          ? 0.058
+          : 0.085;
+      dummy.position.set(patch.x + offsetX, baseY, patch.y + offsetZ);
+      dummy.rotation.set(0, patch.seed * Math.PI * 2, 0);
+      const scale = patch.surfaceType === "road"
+        ? 0.38 + patch.seed * 0.35
+        : 0.65 + patch.seed * 0.55;
+      dummy.scale.set(scale * (0.7 + patch.seed * 0.5), 1, scale);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+    });
+
+    mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.visible = false;
+    mesh.computeBoundingSphere();
+    state.snowPatchMesh = mesh;
+    state.snowPatchMaterial = material;
+    state.terrain.add(mesh);
+  }
+
   function buildTerrain(map) {
     clearGroup(state.terrain);
+    state.snowPatchMesh = null;
+    state.snowPatchMaterial = null;
 
     const roads = [];
     const walkways = [];
@@ -596,13 +774,15 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       }
     }
 
+    const surfaceTextures = ensureSurfaceTextures();
     state.tileMaterials = {
       road: cachedMaterial("tile-road", 0x30373d, {
         roughness: 0.9,
         metalness: 0.04
       }),
       walkway: cachedMaterial("tile-walk", 0xb8beb9, {
-        roughness: 0.93
+        roughness: 0.93,
+        metalness: 0.01
       }),
       grass: cachedMaterial("tile-grass", 0x456b3f, {
         roughness: 1
@@ -611,6 +791,10 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
         roughness: 0.82
       })
     };
+    state.tileMaterials.road.map = surfaceTextures.road;
+    state.tileMaterials.walkway.map = surfaceTextures.walkway;
+    state.tileMaterials.road.needsUpdate = true;
+    state.tileMaterials.walkway.needsUpdate = true;
 
     const roadGeometry = new THREE.BoxGeometry(1.015, 0.055, 1.015);
     const walkwayGeometry = new THREE.BoxGeometry(1.015, 0.09, 1.015);
@@ -631,6 +815,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       state.tileMaterials.zebra,
       0.073
     );
+    buildSnowPatches(map, grass, walkways, roads);
 
     const perimeter = new THREE.LineSegments(
       new THREE.EdgesGeometry(
@@ -655,7 +840,9 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
   function registerBuilding(group, lot, materials) {
     group.userData.lot = lot;
-    group.userData.materials = materials.filter(Boolean);
+    group.userData.materials = materials.filter(
+      (material) => material && !material.userData?.pacWeatherSnow
+    );
     group.userData.bounds = {
       minX: lot.x - 0.45,
       maxX: lot.x + lot.w - 0.55,
@@ -1064,6 +1251,135 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     );
   }
 
+  function weatherSnowMaterial() {
+    const material = cachedMaterial("weather-snow", 0xf1f7f8, {
+      transparent: true,
+      opacity: 0,
+      roughness: 0.94,
+      metalness: 0.01,
+      depthWrite: false
+    });
+    material.userData.pacWeatherSnow = true;
+    return material;
+  }
+
+  function createSnowAccent(geometry, position, scale = null) {
+    const snow = new THREE.Mesh(geometry, weatherSnowMaterial());
+    snow.position.copy(position);
+    if (scale) snow.scale.copy(scale);
+    snow.visible = false;
+    snow.userData.isSnowAccent = true;
+    return snow;
+  }
+
+  function addBuildingSnowAccents(
+    group,
+    centre,
+    width,
+    depth,
+    topY,
+    index,
+    options = {}
+  ) {
+    const patchCount = options.patchCount ?? 3;
+    for (let patch = 0; patch < patchCount; patch += 1) {
+      const seed = seededValue(index * 997 + patch * 131 + 17);
+      const geometry = new THREE.SphereGeometry(0.18 + seed * 0.12, 10, 7);
+      const snow = createSnowAccent(
+        geometry,
+        new THREE.Vector3(
+          centre.x + (seededValue(index * 811 + patch * 73) - 0.5) * width * 0.55,
+          topY,
+          centre.z + (seededValue(index * 577 + patch * 89) - 0.5) * depth * 0.52
+        ),
+        new THREE.Vector3(
+          0.9 + seed * 0.65,
+          0.1 + seed * 0.06,
+          0.72 + seed * 0.7
+        )
+      );
+      group.add(snow);
+    }
+
+    if (options.frontLedge !== false) {
+      const ledge = createSnowAccent(
+        new THREE.BoxGeometry(width * 0.72, 0.055, 0.12),
+        new THREE.Vector3(
+          centre.x,
+          Math.max(0.2, topY - 0.02),
+          centre.z + depth * 0.5 + 0.08
+        )
+      );
+      group.add(ledge);
+    }
+  }
+
+  function createTrafficCone(group, centre, index) {
+    const red = cachedMaterial(`cone-red-${index}`, 0xe94f3c, {
+      emissive: 0x421008,
+      emissiveIntensity: 0.16,
+      roughness: 0.58,
+      metalness: 0.02
+    });
+    const white = cachedMaterial(`cone-white-${index}`, 0xf4f1df, {
+      emissive: 0x5c5a4e,
+      emissiveIntensity: 0.22,
+      roughness: 0.38,
+      metalness: 0.05
+    });
+    const rubber = cachedMaterial(`cone-rubber-${index}`, 0x171a1d, {
+      roughness: 0.92,
+      metalness: 0.02
+    });
+
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(0.48, 0.08, 0.48),
+      rubber
+    );
+    base.position.set(centre.x, 0.055, centre.z);
+    group.add(base);
+
+    const sections = [
+      { top: 0.145, bottom: 0.22, height: 0.22, y: 0.2, material: red },
+      { top: 0.115, bottom: 0.155, height: 0.105, y: 0.36, material: white },
+      { top: 0.072, bottom: 0.12, height: 0.18, y: 0.505, material: red },
+      { top: 0.052, bottom: 0.075, height: 0.07, y: 0.63, material: white },
+      { top: 0.004, bottom: 0.058, height: 0.18, y: 0.755, material: red }
+    ];
+
+    sections.forEach((section) => {
+      const mesh = new THREE.Mesh(
+        new THREE.CylinderGeometry(
+          section.top,
+          section.bottom,
+          section.height,
+          16,
+          1,
+          false
+        ),
+        section.material
+      );
+      mesh.position.set(centre.x, section.y, centre.z);
+      group.add(mesh);
+    });
+
+    const reflectiveHalo = new THREE.Mesh(
+      new THREE.TorusGeometry(0.132, 0.012, 7, 22),
+      new THREE.MeshBasicMaterial({
+        color: 0xffffff,
+        transparent: true,
+        opacity: 0.2,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      })
+    );
+    reflectiveHalo.rotation.x = Math.PI / 2;
+    reflectiveHalo.position.set(centre.x, 0.38, centre.z);
+    group.add(reflectiveHalo);
+
+    return [red, white, rubber];
+  }
+
   function createBuilding(lot, index) {
     const group = new THREE.Group();
     const centre = lotCentre(lot);
@@ -1072,18 +1388,8 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const kind = lot.kind || "smallBuilding";
 
     if (kind === "cone") {
-      const coneMaterial = cachedMaterial(`cone-${index}`, lot.accent || 0xf0793e, {
-        emissive: 0x2c0d00,
-        emissiveIntensity: 0.18,
-        roughness: 0.7
-      });
-      const cone = new THREE.Mesh(
-        new THREE.ConeGeometry(0.2, 0.58, 12),
-        coneMaterial
-      );
-      cone.position.set(centre.x, 0.31, centre.z);
-      group.add(cone);
-      registerBuilding(group, lot, [coneMaterial]);
+      const coneMaterials = createTrafficCone(group, centre, index);
+      registerBuilding(group, lot, coneMaterials);
       return;
     }
 
@@ -1095,11 +1401,16 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
     if (kind === "stall") {
       createStall(group, lot, centre, width, depth, index);
-      registerBuilding(
+      addBuildingSnowAccents(
         group,
-        lot,
-        group.children.map((child) => child.material)
+        centre,
+        width,
+        depth,
+        1.01,
+        index,
+        { patchCount: 2, frontLedge: false }
       );
+      registerBuilding(group, lot, collectMaterials(group));
       return;
     }
 
@@ -1230,6 +1541,16 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       );
     }
 
+    addBuildingSnowAccents(
+      group,
+      centre,
+      width,
+      depth,
+      height + 0.29,
+      index,
+      { patchCount: kind === "mall" || kind === "office" ? 4 : 3 }
+    );
+
     registerBuilding(group, lot, collectMaterials(group));
   }
 
@@ -1320,15 +1641,13 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const trunkMaterial = cachedMaterial("tree-trunk", 0x67452f, {
       roughness: 1
     });
-    const leafMaterial = cachedMaterial("tree-leaf", 0x4e8448, {
-      roughness: 0.95
-    });
 
     const ground = new THREE.Mesh(
       new THREE.BoxGeometry(lot.w * 0.92, 0.1, lot.h * 0.92),
       parkMaterial
     );
     ground.position.set(centre.x, 0.08, centre.z);
+    ground.userData.isParkGround = true;
     group.add(ground);
 
     const treeCount = Math.max(2, Math.min(5, Math.round(lot.w * lot.h * 0.28)));
@@ -1337,20 +1656,61 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       const sz = seededValue(index * 97 + tree * 29 + 3);
       const x = lot.x - 0.25 + sx * Math.max(0.5, lot.w - 0.5);
       const z = lot.y - 0.25 + sz * Math.max(0.5, lot.h - 0.5);
+      const treeSeed = seededValue(tree + index * 13 + 5);
 
       const trunk = new THREE.Mesh(
         new THREE.CylinderGeometry(0.05, 0.07, 0.5, 7),
         trunkMaterial
       );
       trunk.position.set(x, 0.35, z);
+      trunk.userData.isTreeTrunk = true;
       group.add(trunk);
 
+      const leafMaterial = new THREE.MeshStandardMaterial({
+        color: 0x4e8448,
+        roughness: 0.95,
+        metalness: 0.01
+      });
       const crown = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.28 + seededValue(tree + index) * 0.08, 1),
+        new THREE.IcosahedronGeometry(0.28 + treeSeed * 0.08, 1),
         leafMaterial
       );
       crown.position.set(x, 0.72, z);
+      crown.userData.isTreeCrown = true;
+      crown.userData.treeSeed = treeSeed;
+      crown.userData.baseScale = crown.scale.clone();
       group.add(crown);
+
+      const blossoms = new THREE.Group();
+      for (let blossom = 0; blossom < 4; blossom += 1) {
+        const angle = blossom * (Math.PI * 2 / 4) + treeSeed * Math.PI;
+        const petal = new THREE.Mesh(
+          new THREE.SphereGeometry(0.035 + treeSeed * 0.012, 8, 6),
+          new THREE.MeshStandardMaterial({
+            color: blossom % 2 === 0 ? 0xf3c9df : 0xf3dfc7,
+            emissive: blossom % 2 === 0 ? 0x52223c : 0x4b361e,
+            emissiveIntensity: 0.12,
+            roughness: 0.72
+          })
+        );
+        petal.position.set(
+          x + Math.cos(angle) * (0.18 + treeSeed * 0.05),
+          0.73 + Math.sin(angle * 1.7) * 0.13,
+          z + Math.sin(angle) * (0.18 + treeSeed * 0.05)
+        );
+        blossoms.add(petal);
+      }
+      blossoms.visible = false;
+      blossoms.userData.isTreeBlossom = true;
+      group.add(blossoms);
+
+      const snowCap = createSnowAccent(
+        new THREE.IcosahedronGeometry(0.22 + treeSeed * 0.05, 1),
+        new THREE.Vector3(x, 0.87, z),
+        new THREE.Vector3(1.05, 0.32, 1.05)
+      );
+      snowCap.userData.isTreeSnow = true;
+      group.add(snowCap);
     }
   }
 
@@ -2579,6 +2939,90 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     state.effects.add(state.seasonPoints);
   }
 
+  function createWeatherRain() {
+    const positions = new Float32Array(MAX_WEATHER_RAIN_DROPS * 2 * 3);
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(positions, 3)
+    );
+
+    const material = new THREE.LineBasicMaterial({
+      color: 0xa9dce8,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    state.rainLines = new THREE.LineSegments(geometry, material);
+    state.rainPositions = positions;
+    state.rainSeeds = Array.from(
+      { length: MAX_WEATHER_RAIN_DROPS },
+      (_, index) => ({
+        x: seededValue(index * 811 + 101),
+        y: seededValue(index * 577 + 211),
+        z: seededValue(index * 997 + 307),
+        speed: 0.7 + seededValue(index * 431 + 67) * 0.7
+      })
+    );
+    state.rainLines.visible = false;
+    state.effects.add(state.rainLines);
+  }
+
+  function updateWeatherRain(environment, time) {
+    if (!state.rainLines || !source.localPacman) return;
+
+    const rain = clamp(
+      Number(environment.rainAmount ?? environment.showerAmount) || 0,
+      0,
+      1
+    );
+    const active = rain > 0.02;
+    state.rainLines.visible = active;
+    if (!active) return;
+
+    const maxCount = reducedMotionQuery.matches
+      ? 34
+      : MAX_WEATHER_RAIN_DROPS;
+    const count = Math.max(18, Math.round(maxCount * (0.28 + rain * 0.72)));
+    const positions = state.rainPositions;
+    const centreX = Number(source.localPacman.x) || 0;
+    const centreZ = Number(source.localPacman.y) || 0;
+    const spanX = 18;
+    const spanZ = 14;
+    const fallSpan = 8;
+
+    state.rainLines.geometry.setDrawRange(0, count * 2);
+
+    for (let index = 0; index < count; index += 1) {
+      const seed = state.rainSeeds[index];
+      const x =
+        centreX - spanX * 0.5 +
+        ((seed.x * spanX + time * (1.1 + seed.speed)) % spanX);
+      const z =
+        centreZ - spanZ * 0.5 +
+        ((seed.z * spanZ + time * 0.48) % spanZ);
+      const y =
+        0.25 +
+        ((seed.y * fallSpan - time * (5.8 + seed.speed * 3.4)) % fallSpan +
+          fallSpan) %
+        fallSpan;
+      const length = 0.24 + rain * 0.42 + seed.speed * 0.09;
+      const cursor = index * 6;
+
+      positions[cursor] = x;
+      positions[cursor + 1] = y;
+      positions[cursor + 2] = z;
+      positions[cursor + 3] = x - 0.08 - rain * 0.06;
+      positions[cursor + 4] = y - length;
+      positions[cursor + 5] = z + 0.025;
+    }
+
+    state.rainLines.material.opacity = 0.18 + rain * 0.42;
+    state.rainLines.geometry.attributes.position.needsUpdate = true;
+  }
+
   function fallbackEnvironment() {
     const elapsed = Number(
       window.PacmanLivingCity?.getSharedElapsed?.()
@@ -2611,44 +3055,83 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     if (!state.seasonPoints || !source.map || !source.localPacman) return;
 
     const seasonId = environment.season?.id || "spring";
+    const snowAmount = clamp(Number(environment.snowAmount) || 0, 0, 1);
+    const rainAmount = clamp(
+      Number(environment.rainAmount ?? environment.showerAmount) || 0,
+      0,
+      1
+    );
+    const windAmount = clamp(Number(environment.windAmount) || 0, 0, 1);
     const active = ["spring", "autumn", "winter"].includes(seasonId);
     state.seasonPoints.visible = active;
     if (!active) return;
 
-    const count = reducedMotionQuery.matches ? 24 : MAX_SEASON_PARTICLES;
+    let count = 0;
+    if (seasonId === "winter") {
+      const baseline = reducedMotionQuery.matches ? 8 : 14;
+      const extra = reducedMotionQuery.matches ? 18 : 72;
+      count = Math.round(baseline + snowAmount * extra);
+    } else if (seasonId === "autumn") {
+      count = reducedMotionQuery.matches ? 18 : 52;
+    } else {
+      const dryCount = reducedMotionQuery.matches ? 10 : 34;
+      count = Math.round(dryCount * (1 - rainAmount * 0.72));
+    }
+
+    count = clamp(count, 0, MAX_SEASON_PARTICLES);
     const positions = state.seasonPositions;
-    const centreX = source.localPacman.x;
-    const centreZ = source.localPacman.y;
+    const centreX = Number(source.localPacman.x) || 0;
+    const centreZ = Number(source.localPacman.y) || 0;
     const spanX = 17;
     const spanZ = 13;
 
     state.seasonPoints.geometry.setDrawRange(0, count);
 
-    state.seasonSeeds.forEach((seed, index) => {
-      const speed = seasonId === "winter" ? 0.8 : seasonId === "autumn" ? 0.55 : 0.4;
-      const drift = seasonId === "autumn" ? Math.sin(time * 0.8 + index) * 1.4 : 0;
-      const x = centreX - spanX * 0.5 + ((seed.x * spanX + time * speed + drift) % spanX);
-      const z = centreZ - spanZ * 0.5 + ((seed.z * spanZ + time * speed * 0.45) % spanZ);
-      const y = 0.3 + ((seed.y * 7 - time * (seasonId === "winter" ? 0.55 : 0.32)) % 7 + 7) % 7;
+    for (let index = 0; index < count; index += 1) {
+      const seed = state.seasonSeeds[index];
+      const baseSpeed = seasonId === "winter"
+        ? 0.34 + snowAmount * 0.48
+        : seasonId === "autumn"
+          ? 0.58 + windAmount * 0.72
+          : 0.35;
+      const lateralDrift = seasonId === "autumn"
+        ? Math.sin(time * 0.8 + index) * (1.1 + windAmount * 1.6)
+        : seasonId === "winter"
+          ? Math.sin(time * 0.42 + index) * (0.22 + windAmount * 0.55)
+          : Math.sin(time * 0.3 + index) * 0.2;
+      const x =
+        centreX - spanX * 0.5 +
+        ((seed.x * spanX + time * baseSpeed + lateralDrift) % spanX);
+      const z =
+        centreZ - spanZ * 0.5 +
+        ((seed.z * spanZ + time * baseSpeed * 0.35) % spanZ);
+      const fallSpeed = seasonId === "winter"
+        ? 0.3 + snowAmount * 0.62
+        : seasonId === "autumn"
+          ? 0.34
+          : 0.2;
+      const y =
+        0.3 +
+        ((seed.y * 7 - time * fallSpeed) % 7 + 7) % 7;
 
       positions[index * 3] = x;
       positions[index * 3 + 1] = y;
       positions[index * 3 + 2] = z;
-    });
+    }
 
     const material = state.seasonPoints.material;
     if (seasonId === "winter") {
       material.color.set(0xeef8ff);
-      material.size = 0.09;
-      material.opacity = 0.72;
+      material.size = 0.075 + snowAmount * 0.045;
+      material.opacity = 0.42 + snowAmount * 0.42;
     } else if (seasonId === "autumn") {
       material.color.set(0xd38a3e);
       material.size = 0.1;
-      material.opacity = 0.6;
+      material.opacity = 0.52 + windAmount * 0.16;
     } else {
-      material.color.set(environment.showerAmount > 0.1 ? 0x9ed9e8 : 0xe8cfe1);
-      material.size = environment.showerAmount > 0.1 ? 0.055 : 0.085;
-      material.opacity = 0.55;
+      material.color.set(0xe8cfe1);
+      material.size = 0.08;
+      material.opacity = 0.42 + (1 - rainAmount) * 0.18;
     }
 
     state.seasonPoints.geometry.attributes.position.needsUpdate = true;
@@ -2660,6 +3143,22 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const day = clamp(Number(environment.dayAmount) || 0, 0, 1);
     const night = clamp(Number(environment.nightAmount) || 0, 0, 1);
     const seasonId = environment.season?.id || "spring";
+    const rain = clamp(
+      Number(environment.rainAmount ?? environment.showerAmount) || 0,
+      0,
+      1
+    );
+    const wet = clamp(Number(environment.wetAmount) || rain, 0, 1);
+    const snow = clamp(Number(environment.snowAmount) || 0, 0, 1);
+    const groundSnow = clamp(
+      Number(environment.groundSnowAmount) ||
+      (seasonId === "winter" ? 0.3 : 0),
+      0,
+      1
+    );
+    const mist = clamp(Number(environment.mistAmount) || 0, 0, 1);
+    const overcast = clamp(Number(environment.overcastAmount) || 0, 0, 1);
+    const heatHaze = clamp(Number(environment.heatHazeAmount) || 0, 0, 1);
 
     const skyBySeason = {
       spring: new THREE.Color(0x94b7bd),
@@ -2668,21 +3167,30 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
       winter: new THREE.Color(0xa8bdc8)
     };
     const nightSky = new THREE.Color(0x0b1320);
-    const daySky = skyBySeason[seasonId] || skyBySeason.spring;
+    const daySky = (skyBySeason[seasonId] || skyBySeason.spring).clone();
+    daySky.lerp(new THREE.Color(0x78878d), overcast * 0.46);
+    daySky.lerp(new THREE.Color(0xd0d7d4), mist * 0.18);
+    daySky.lerp(new THREE.Color(0xd4b47b), heatHaze * 0.12);
     const sky = nightSky.clone().lerp(daySky, day);
 
     state.scene.background.copy(sky);
-    state.scene.fog.color.copy(sky.clone().multiplyScalar(0.82));
-    state.scene.fog.near = 18 + day * 8;
-    state.scene.fog.far = 55 + day * 28;
+    state.scene.fog.color.copy(
+      sky.clone().lerp(new THREE.Color(0xcbd5d3), mist * 0.42)
+    );
+    state.scene.fog.near = Math.max(8, 18 + day * 8 - mist * 12 - rain * 4);
+    state.scene.fog.far = Math.max(32, 55 + day * 28 - mist * 32 - rain * 9);
 
-    state.ambientLight.intensity = 0.55 + day * 1.05;
+    state.ambientLight.intensity =
+      (0.55 + day * 1.05) * (1 - overcast * 0.18);
     state.ambientLight.color.set(night > 0.5 ? 0x92aee2 : 0xc5e2ff);
     state.ambientLight.groundColor.set(
       seasonId === "winter" ? 0x65767b : 0x2c4027
     );
 
-    state.sunLight.intensity = 0.16 + day * 1.65;
+    state.sunLight.intensity =
+      (0.16 + day * 1.65) *
+      (1 - overcast * 0.48) *
+      (1 - rain * 0.22);
     state.sunLight.color.set(
       seasonId === "autumn"
         ? 0xffc588
@@ -2706,7 +3214,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
         summer: {
           road: 0x393634,
           walkway: 0xc4c0b5,
-          grass: 0x4f7e35
+          grass: 0x3f7633
         },
         autumn: {
           road: 0x3c3835,
@@ -2714,25 +3222,102 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
           grass: 0x706231
         },
         winter: {
-          road: 0x56636d,
-          walkway: 0xe0e7e9,
-          grass: 0xbac9cb
+          road: 0x505d65,
+          walkway: 0xd9e1e3,
+          grass: 0xaebfc2
         }
       };
       const palette = palettes[seasonId] || palettes.spring;
-      state.tileMaterials.road.color.set(palette.road);
-      state.tileMaterials.walkway.color.set(palette.walkway);
+      const roadColor = new THREE.Color(palette.road).multiplyScalar(
+        1 - wet * 0.17
+      );
+      const walkwayColor = new THREE.Color(palette.walkway).multiplyScalar(
+        1 - wet * 0.08
+      );
+
+      state.tileMaterials.road.color.copy(roadColor);
+      state.tileMaterials.walkway.color.copy(walkwayColor);
       state.tileMaterials.grass.color.set(palette.grass);
-      state.tileMaterials.road.roughness =
-        seasonId === "spring" && environment.showerAmount > 0.1 ? 0.45 : 0.9;
-      state.tileMaterials.road.metalness =
-        seasonId === "spring" && environment.showerAmount > 0.1 ? 0.16 : 0.04;
+      state.tileMaterials.road.roughness = 0.9 - wet * 0.52;
+      state.tileMaterials.road.metalness = 0.04 + wet * 0.13;
+      state.tileMaterials.walkway.roughness = 0.93 - wet * 0.37;
+      state.tileMaterials.walkway.metalness = 0.01 + wet * 0.08;
+      state.tileMaterials.zebra.roughness = 0.82 - wet * 0.34;
+      state.tileMaterials.zebra.metalness = wet * 0.07;
+    }
+
+    if (state.snowPatchMesh && state.snowPatchMaterial) {
+      const visible = seasonId === "winter" && groundSnow > 0.02;
+      state.snowPatchMesh.visible = visible;
+      state.snowPatchMaterial.opacity = visible
+        ? 0.28 + groundSnow * 0.62
+        : 0;
+      state.snowPatchMaterial.depthWrite = visible && groundSnow > 0.58;
+      state.snowPatchMaterial.needsUpdate = true;
     }
 
     state.buildings.traverse((child) => {
+      if (child.userData.isTreeBlossom) {
+        child.visible = seasonId === "spring" && rain < 0.82;
+        return;
+      }
+
+      if (child.userData.isTreeCrown && child.material) {
+        const seed = Number(child.userData.treeSeed) || 0;
+        const base = child.userData.baseScale || new THREE.Vector3(1, 1, 1);
+        let color = 0x4e8448;
+        let scale = 1;
+
+        if (seasonId === "summer") {
+          color = seed > 0.5 ? 0x245f34 : 0x2e713c;
+          scale = 1.08;
+        } else if (seasonId === "autumn") {
+          color = seed > 0.66
+            ? 0xc06432
+            : seed > 0.33
+              ? 0xd38f34
+              : 0x8f552c;
+          scale = 0.96;
+        } else if (seasonId === "winter") {
+          color = seed > 0.5 ? 0x5c5946 : 0x67604b;
+          scale = 0.58;
+        } else {
+          color = seed > 0.5 ? 0x4c914e : 0x58a35b;
+        }
+
+        child.material.color.set(color);
+        child.scale.copy(base).multiplyScalar(scale);
+        return;
+      }
+
+      if (child.userData.isParkGround && child.material) {
+        child.material.color.set(
+          seasonId === "winter"
+            ? 0x9fada8
+            : seasonId === "autumn"
+              ? 0x655d34
+              : seasonId === "summer"
+                ? 0x356d3a
+                : 0x477a48
+        );
+      }
+
+      if (child.userData.isSnowAccent) {
+        const visible = seasonId === "winter" && groundSnow > 0.04;
+        child.visible = visible;
+        if (child.material) {
+          child.material.opacity = visible
+            ? 0.34 + groundSnow * 0.64
+            : 0;
+          child.material.depthWrite = visible && groundSnow > 0.55;
+          child.material.needsUpdate = true;
+        }
+        return;
+      }
+
       if (!child.material) return;
       if (child.userData.isLampBulb) {
-        child.material.emissiveIntensity = 0.25 + night * 1.25;
+        child.material.emissiveIntensity = 0.25 + night * 1.25 + wet * 0.12;
       } else if (
         child.material.emissive &&
         child.material.emissive.getHex() !== 0
@@ -2743,6 +3328,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
 
     updateSeasonStatus(environment);
     updateSeasonParticles(environment, time);
+    updateWeatherRain(environment, time);
   }
 
   function updateSeasonStatus(environment) {
@@ -2752,9 +3338,15 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.185.1/build/three.m
     const phase = String(environment.phase || "day").toUpperCase();
     status.hidden = !window.ElementalPacman?.isRunning?.();
     status.dataset.season = environment.season?.id || "spring";
+    const weatherName = String(
+      environment.weather?.name || environment.weatherName || "Clear"
+    ).toUpperCase();
+    const weatherIcon = environment.weather?.icon || environment.weatherIcon || "☀";
     status.textContent = `${environment.season?.icon || "✦"} ${String(
       environment.season?.name || "Spring"
-    ).toUpperCase()} · ${phase}`;
+    ).toUpperCase()} · ${phase} · ${weatherIcon} ${weatherName}`;
+    status.dataset.weather =
+      environment.weather?.id || environment.weatherId || "clear";
 
     if (state.board) {
       state.board.dataset.season = environment.season?.id || "spring";
