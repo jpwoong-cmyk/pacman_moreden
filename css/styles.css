@@ -1331,3 +1331,25 @@ body.lobby-open {
     font-size: 0.72rem;
   }
 }
+
+/* Personal hobby mark */
+.lobby-maker-logo {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  width: clamp(72px, 9vw, 105px);
+  height: auto;
+  opacity: 0.72;
+  pointer-events: none;
+  user-select: none;
+  z-index: 3;
+}
+
+@media (max-width: 600px) {
+  .lobby-maker-logo {
+    right: 10px;
+    bottom: 10px;
+    width: 64px;
+    opacity: 0.62;
+  }
+}
