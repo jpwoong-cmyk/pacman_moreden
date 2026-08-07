@@ -1334,21 +1334,29 @@ body.lobby-open {
 
 .lobby-maker-logo {
   position: absolute;
-  right: -18px;
-  bottom: -18px;
-  width: 150px;
+  left: 18px;
+  bottom: 14px;
+
+  width: clamp(78px, 9vw, 110px);
   height: auto;
-  opacity: 0.72;
+
+  opacity: 0.58;
+
   pointer-events: none;
   user-select: none;
+
   z-index: 3;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 768px) {
+
   .lobby-maker-logo {
-    right: 2px;
-    bottom: 2px;
-    width: 84px;
-    opacity: 0.62;
+    left: 12px;
+    bottom: 12px;
+
+    width: 70px;
+
+    opacity: 0.48;
   }
+
 }
