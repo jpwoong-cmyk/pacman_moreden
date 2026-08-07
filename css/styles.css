@@ -1334,13 +1334,13 @@ body.lobby-open {
 
 .lobby-maker-logo {
   position: absolute;
-  left: 18px;
-  bottom: 14px;
+  left: 14px;
+  bottom: 6px;
 
   width: clamp(78px, 9vw, 110px);
   height: auto;
 
-  opacity: 0.58;
+  opacity: 0.40
 
   pointer-events: none;
   user-select: none;
@@ -1351,12 +1351,12 @@ body.lobby-open {
 @media (max-width: 768px) {
 
   .lobby-maker-logo {
-    left: 12px;
-    bottom: 12px;
+    left: 8px;
+    bottom: 8px;
 
     width: 70px;
 
-    opacity: 0.48;
+    opacity: 0.40;
   }
 
 }
