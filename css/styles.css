@@ -1333,7 +1333,7 @@ body.lobby-open {
 }
 
 .lobby-maker-logo {
-  position: absolute;
+  position: fixed;
   left: 6px;
   bottom: -2px;
 
