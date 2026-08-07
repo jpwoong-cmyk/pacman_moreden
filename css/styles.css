@@ -1334,8 +1334,8 @@ body.lobby-open {
 
 .lobby-maker-logo {
   position: absolute;
-  left: 8px;
-  bottom: 0px;
+  left: 6px;
+  bottom: -2px;
 
   width: clamp(78px, 9vw, 110px);
   height: auto;
