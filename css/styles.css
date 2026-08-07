@@ -1340,7 +1340,7 @@ body.lobby-open {
   width: clamp(78px, 9vw, 110px);
   height: auto;
 
-  opacity: 0.40
+  opacity: 0.40;
 
   pointer-events: none;
   user-select: none;
