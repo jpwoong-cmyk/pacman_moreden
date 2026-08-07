@@ -1332,12 +1332,11 @@ body.lobby-open {
   }
 }
 
-/* Personal hobby mark */
 .lobby-maker-logo {
   position: absolute;
-  right: 18px;
-  bottom: 14px;
-  width: clamp(72px, 9vw, 105px);
+  right: -18px;
+  bottom: -18px;
+  width: 150px;
   height: auto;
   opacity: 0.72;
   pointer-events: none;
@@ -1347,9 +1346,9 @@ body.lobby-open {
 
 @media (max-width: 600px) {
   .lobby-maker-logo {
-    right: 10px;
-    bottom: 10px;
-    width: 64px;
+    right: 2px;
+    bottom: 2px;
+    width: 84px;
     opacity: 0.62;
   }
 }
